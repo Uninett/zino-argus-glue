@@ -1,0 +1,12 @@
+[zino]
+server = hegre.uninett.no
+port = 8001
+user = user
+secret = secretkey
+
+[argus]
+server = https://argus/api/url
+token = argustoken
+
+[metadata]
+ports = http://path/to/curitz_circuitmapping.json

@@ -91,7 +91,6 @@ def main():
 
         start()
 
-        _zino.close()
         # We went out of the loop, reconnect
     except ritz.AuthenticationError:
         _logger.critical('Unable to authenticate against zino, retrying in 30sec')
@@ -104,6 +103,11 @@ def main():
     except Exception:  # pylint: disable=broad-except
         # Break on an unhandled exception
         _logger.critical('Traceback from Main loop:\n%s', traceback.format_exc())
+    finally:
+        try:
+            _zino.close()
+        except Exception:
+            pass
 
         _zino = None
         _notifier = None

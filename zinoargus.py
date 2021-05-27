@@ -8,7 +8,7 @@ import ritz
 import traceback
 import logging
 import argparse
-import time
+# import time
 
 
 _logger = logging.getLogger('zinoargus')
@@ -128,79 +128,72 @@ def start():
     # Collect circuit metadata
     collect_metadata()
 
-    # Get all current tickets from Argus
-    argus_tickets = dict()
-    aticket: Incident
-    for aticket in _argus.get_my_incidents(open=True):
-        if not aticket.source_incident_id:
-            _logger.error('Ignoring ticket no source_incident_id set pk:%s, "%s"',
-                          aticket.pk, aticket.description)
+    # Get all current incidents from Argus
+    argus_incidents = dict()
+    incident: Incident
+    for incident in _argus.get_my_incidents(open=True):
+        if not incident.source_incident_id:
+            _logger.error('Ignoring incidents no source_incident_id set pk:%s, "%s"',
+                          incident.pk, incident.description)
             continue
-        if not aticket.source_incident_id.isnumeric():
-            _logger.error('Ignore ticket %s source_incident_id is not a numeric value (%s)',
-                          aticket.pk,
-                          repr(aticket.source_incident_id))
+        if not incident.source_incident_id.isnumeric():
+            _logger.error('Ignore incidents %s source_incident_id is not a numeric value (%s)',
+                          incident.pk,
+                          repr(incident.source_incident_id))
             continue
-        _logger.info('Adding argus ticket %s, zino: %s, %s',
-                     aticket.pk,
-                     aticket.source_incident_id,
-                     repr(aticket.description))
+        _logger.info('Adding argus incidents %s, zino: %s, %s',
+                     incident.pk,
+                     incident.source_incident_id,
+                     repr(incident.description))
 
-        argus_tickets[int(aticket.source_incident_id)] = aticket
+        argus_incidents[int(incident.source_incident_id)] = incident
 
-    # Collecting all tickets from Zino
-    zino_tickets = dict()
-    zticket: ritz.Case
-    for zticket in _zino.cases_iter():
-        if zticket.type in [ritz.caseType.BFD]:
-            _logger.info('Zino ticket %s of type %s is ignored',
-                         zticket.id,
-                         zticket.type)
-            continue
-
-        if zticket.type not in [ritz.caseType.REACHABILITY]:
-            _logger.info('Zino ticket %s of type %s ignored to not overflow collection',
-                         zticket.id,
-                         zticket.type)
+    # Collecting all cases from Zino
+    zino_cases = dict()
+    case: ritz.Case
+    for case in _zino.cases_iter():
+        if case.type in [ritz.caseType.BFD]:
+            _logger.info('Zino case %s of type %s is ignored',
+                         case.id,
+                         case.type)
             continue
 
-        _logger.info('Zino ticket %s of type %s added',
-                     zticket.id,
-                     zticket.type)
-        zino_tickets[zticket.id] = zticket
+        if case.type not in [ritz.caseType.REACHABILITY]:
+            _logger.info('Zino case %s of type %s ignored to not overflow collection',
+                         case.id,
+                         case.type)
+            continue
 
-    # All tickets collected
+        _logger.info('Zino case %s of type %s added',
+                     case.id,
+                     case.type)
+        zino_cases[case.id] = case
 
-    # Find tickets to delete from argus (ticket closed in zino)
-    for ticketid in set(argus_tickets.keys()) - set(zino_tickets.keys()):
+    # All cases collected
+
+    # Find cases to delete from argus (case closed in zino)
+    for incidentid in set(argus_incidents.keys()) - set(zino_cases.keys()):
         _logger.info('Zino tocket %s is not cached from zino, and ready to be closed in argus')
-        close_argus_ticket(argus_tickets[ticketid])
+        close_argus_incident(argus_incidents[incidentid])
 
-    # Find tickets to create in argus
-    for ticketid in set(zino_tickets.keys()) - set(argus_tickets.keys()):
-        _logger.info('Zino ticket %s is not in argus, creating', ticketid)
-        create_argus_ticket(zino_tickets[ticketid])
+    # Find cases to create in argus
+    for caseid in set(zino_cases.keys()) - set(argus_incidents.keys()):
+        _logger.info('Zino ticket %s is not in argus, creating', caseid)
+        create_argus_incident(zino_cases[caseid])
 
 
-
-def close_argus_ticket(argus_ticket):
-    _logger.info('Deleting argus ticket %s, buuuut its not implemented yet ... :/',
+def close_argus_incident(argus_ticket):
+    _logger.info('Deleting argus incident %s, buuuut its not implemented yet ... :/',
                  argus_ticket.pk)
 
 
-def create_argus_ticket(zino_ticket):
-    _logger.info('Creating ticket %s in argus, buuuut its not implemented yet ... :/',
+def create_argus_incident(zino_ticket):
+    _logger.info('Creating incident %s in argus, buuuut its not implemented yet ... :/',
                  zino_ticket.id)
-
-
-
-
 
 
 def signal_handler(aignum, frame):
     raise(SystemExit)
-
-
 
 
 if __name__ == '__main__':

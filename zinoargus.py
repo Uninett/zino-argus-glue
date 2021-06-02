@@ -8,7 +8,9 @@ import ritz
 import traceback
 import logging
 import argparse
-# import time
+import time
+import yaml
+import sys
 
 
 _logger = logging.getLogger('zinoargus')
@@ -17,7 +19,7 @@ CONFIGFILE = 'config.cfg'
 FORMATTER = logging.Formatter(
     '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-_config = configparser.ConfigParser(allow_no_value=True)
+_config = dict()
 _args = None
 _zino: ritz.ritz = None
 _notifier: ritz.notifier = None
@@ -63,11 +65,20 @@ def main():
     global _zino
     global _notifier
     global _argus
+    global _config
 
     parse_arguments()
 
     # Read configuration
-    _config.read(CONFIGFILE)
+    try:
+        with open(CONFIGFILE, 'r') as _f:
+            _config = yaml.safe_load(_f)
+
+    except OSError:
+        _logger.error('No configuration file found: %s', CONFIGFILE)
+        sys.exit(1)
+
+
 
     # Initiate Logging
     setup_logging()
@@ -76,15 +87,15 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    _argus = Client(api_root_url=_config.get('argus', 'server'),
-                    token=_config.get('argus', 'token'))
+    _argus = Client(api_root_url=_config.get('api', {}).get('url'),
+                    token=_config.get('api', {}).get('token'))
 
     '''Initiate connectionloop to zino'''
     try:
-        _zino = ritz.ritz(server=_config.get('zino', 'server'),
-                          port=_config.get('zino', 'port'),
-                          username=_config.get('zino', 'user'),
-                          password=_config.get('zino', 'secret'))
+        _zino = ritz.ritz(server=_config.get('zino', {}).get('server'),
+                          port=_config.get('zino', {}).get('port'),
+                          username=_config.get('zino', {}).get('user'),
+                          password=_config.get('zino', {}).get('secret'))
         _zino.connect()
         _notifier = ritz.notifier(_zino)
         _notifier.connect()
@@ -115,9 +126,10 @@ def main():
 
 def collect_metadata():
     global _metadata
+    global _config
 
     r = requests.get(
-        url=_config.get('metadata', 'ports'))
+        url=_config.get('metadata', {}).get('ports_url'))
 
     r2 = r.json()
     _logger.info('Collected metadata for %s routers', len(r2['data']))

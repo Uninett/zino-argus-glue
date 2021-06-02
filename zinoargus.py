@@ -220,13 +220,15 @@ def start():
                 # zino_cases[update.id] = _zino.case(update.id)
                 pass
 
+
+def close_argus_incident(argus_incident):
     _logger.info('Deleting argus incident %s, buuuut its not implemented yet ... :/',
-                 argus_ticket.pk)
+                 argus_incident.pk)
 
 
-def create_argus_incident(zino_ticket):
+def create_argus_incident(zino_case):
     _logger.info('Creating incident %s in argus, buuuut its not implemented yet ... :/',
-                 zino_ticket.id)
+                 zino_case.id)
 
 
 def signal_handler(aignum, frame):

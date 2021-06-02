@@ -196,8 +196,30 @@ def start():
         _logger.info('Zino ticket %s is not in argus, creating', caseid)
         create_argus_incident(zino_cases[caseid])
 
+    while True:
+        update = _notifier.poll(timeout=1)
+        if not update:
+            # No notification recieved
+            continue
 
-def close_argus_incident(argus_ticket):
+        if update.type == "state":
+            old_state, new_state = update.info.split(" ", 1)
+            if new_state == "closed":
+                # Closing case
+                _logger.debug('Zino case %s is closed and is being removed from argus', update.id)
+                close_argus_incident(argus_incidents[update.id])
+                del zino_cases[update.id]
+                del argus_incidents[update.id]
+            elif old_state == "embryonic" and new_state == "open":
+                # Newly created case
+                _logger.debug('Creating zino case %s in argus', update.id)
+                zino_cases[update.id] = _zino.case(update.id)
+                argus_incidents[update.id] = create_argus_incident(zino_cases[caseid])
+            else:
+                # All other state changes
+                # zino_cases[update.id] = _zino.case(update.id)
+                pass
+
     _logger.info('Deleting argus incident %s, buuuut its not implemented yet ... :/',
                  argus_ticket.pk)
 

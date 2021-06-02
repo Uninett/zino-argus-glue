@@ -97,8 +97,7 @@ def main():
                           username=_config.get('zino', {}).get('user'),
                           password=_config.get('zino', {}).get('secret'))
         _zino.connect()
-        _notifier = ritz.notifier(_zino)
-        _notifier.connect()
+        _notifier = _zino.init_notifier()
 
         start()
 

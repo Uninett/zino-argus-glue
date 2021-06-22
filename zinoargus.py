@@ -215,7 +215,7 @@ def start():
                 # Newly created case
                 _logger.debug('Creating zino case %s as incident in argus', update.id)
                 zino_cases[update.id] = _zino.case(update.id)
-                argus_incidents[update.id] = create_argus_incident(zino_cases[caseid])
+                argus_incidents[update.id] = create_argus_incident(zino_cases[update.id])
             else:
                 # All other state changes
                 # zino_cases[update.id] = _zino.case(update.id)

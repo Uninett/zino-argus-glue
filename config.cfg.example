@@ -1,12 +1,24 @@
-[zino]
-server = hegre.uninett.no
-port = 8001
-user = user
-secret = secretkey
+api:
+  # The API url and token settings are the minimal required config settings to
+  # access an Argus API server:
+  url: https://path.to.api/api/v1/
+  token: 1234543654778675647436245234
 
-[argus]
-server = https://argus/api/url
-token = argustoken
+zino:
+  # The configuration used to establish a zino server session
+  server: zino.server
+  port: 8001
+  user: zinouser
+  secret: 1234123412341234123412341324123413241
 
-[metadata]
-ports = http://path/to/curitz_circuitmapping.json
+metadata:
+  ports_url: http://telemator.circuit.mapping.server/tm/curitz_circuitmapping.json
+
+# Tag directives
+tags:
+  # This option allows you to tag all incidents from this navargus instance
+  # with a specific set of tags
+  always-add:
+    tag1: value1
+    customer: example.org
+    service: CNaaS

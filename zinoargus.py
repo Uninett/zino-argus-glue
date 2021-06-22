@@ -250,9 +250,12 @@ def generate_tags(zino_case):
             # GET UN
 
 def close_argus_incident(argus_incident):
+    # TODO: Add timestamp on resolve_incident
+    # TODO: Post a description of why this incident is closed
     _logger.info('Deleting argus incident %s, buuuut its not implemented yet ... :/',
                  argus_incident.pk)
 
+    _argus.resolve_incident(argus_incident)
 
 def create_argus_incident(zino_case: ritz.Case):
     description = describe_zino_case(zino_case)

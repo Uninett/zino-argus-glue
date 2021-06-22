@@ -208,9 +208,15 @@ def start():
             if new_state == "closed":
                 # Closing case
                 _logger.debug('Zino case %s is closed and is being removed from argus', update.id)
-                close_argus_incident(argus_incidents[update.id])
-                del zino_cases[update.id]
-                del argus_incidents[update.id]
+                if update.id in argus_incidents:
+                    close_argus_incident(argus_incidents[update.id])
+                    del argus_incidents[update.id]
+                else:
+                    _logger.error('Can''t close zino case %s because it''s not found in argus cache', update.id)
+                
+                if update.id in zino_cases:
+                    del zino_cases[update.id]
+
             elif old_state == "embryonic" and new_state == "open":
                 # Newly created case
                 _logger.debug('Creating zino case %s as incident in argus', update.id)

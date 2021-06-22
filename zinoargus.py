@@ -189,12 +189,12 @@ def start():
 
     # Find cases to delete from argus (case closed in zino)
     for incidentid in set(argus_incidents.keys()) - set(zino_cases.keys()):
-        _logger.info('Zino tocket %s is not cached from zino, and ready to be closed in argus')
+        _logger.info('Zino case %s is not cached from zino, and ready to be closed in argus')
         close_argus_incident(argus_incidents[incidentid])
 
     # Find cases to create in argus
     for caseid in set(zino_cases.keys()) - set(argus_incidents.keys()):
-        _logger.info('Zino ticket %s is not in argus, creating', caseid)
+        _logger.info('Zino case %s is not in argus, creating', caseid)
         create_argus_incident(zino_cases[caseid])
 
     while True:
@@ -202,7 +202,7 @@ def start():
         if not update:
             # No notification recieved
             continue
-
+        print('Update on case id:"{}" type:"{}" info:"{}"'.format(update.id, update.type, update.info))
         if update.type == "state":
             old_state, new_state = update.info.split(" ", 1)
             if new_state == "closed":
@@ -213,7 +213,7 @@ def start():
                 del argus_incidents[update.id]
             elif old_state == "embryonic" and new_state == "open":
                 # Newly created case
-                _logger.debug('Creating zino case %s in argus', update.id)
+                _logger.debug('Creating zino case %s as incident in argus', update.id)
                 zino_cases[update.id] = _zino.case(update.id)
                 argus_incidents[update.id] = create_argus_incident(zino_cases[caseid])
             else:

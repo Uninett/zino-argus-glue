@@ -11,6 +11,7 @@ import argparse
 import time
 import yaml
 import sys
+from datetime import datetime
 
 
 _logger = logging.getLogger('zinoargus')
@@ -221,14 +222,56 @@ def start():
                 pass
 
 
+
+def describe_zino_case(zino_case: ritz.Case):
+    if zino_case.type == ritz.caseType.REACHABILITY:
+        pass
+    elif zino_case.type == ritz.caseType.BGP:
+        pass
+    elif zino_case.type == ritz.caseType.BFD:
+        pass
+    elif zino_case.type == ritz.caseType.PORTSTATE:
+        return "{} port {} is MEH ({})".format(
+            zino_case.router,
+            zino_case.port,
+            zino_case.get("descr", ""),
+        )
+    elif zino_case.type == ritz.caseType.ALARM:
+        pass
+    return None
+
+def generate_tags(zino_case):
+    yield "host", zino_case.router
+    if zino_case.type == ritz.caseType.PORTSTATE:
+        yield "interface", zino_case.port
+        descr = zino_case.get("descr")
+        if descr:
+            yield "description", descr
+            # GET UN
+
 def close_argus_incident(argus_incident):
     _logger.info('Deleting argus incident %s, buuuut its not implemented yet ... :/',
                  argus_incident.pk)
 
 
-def create_argus_incident(zino_case):
-    _logger.info('Creating incident %s in argus, buuuut its not implemented yet ... :/',
-                 zino_case.id)
+def create_argus_incident(zino_case: ritz.Case):
+    description = describe_zino_case(zino_case)
+    if not description:
+        _logger.info('Ignoring zino case %s', zino_case.id)
+        return None
+
+    _logger.info('Creating argus incident for zino case %s', zino_case.id)
+    print(description)
+
+    incident = Incident(start_time=zino_case.opened,
+                        end_time=datetime.max,
+                        source_incident_id=zino_case.id,
+                        description=description,
+                        tags=dict(generate_tags(zino_case)),
+                        )
+    return _argus.post_incident(incident)
+    
+
 
 
 def signal_handler(aignum, frame):

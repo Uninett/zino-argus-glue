@@ -213,7 +213,7 @@ def start():
                     del argus_incidents[update.id]
                 else:
                     _logger.error('Can''t close zino case %s because it''s not found in argus cache', update.id)
-                
+
                 if update.id in zino_cases:
                     del zino_cases[update.id]
 
@@ -246,6 +246,7 @@ def describe_zino_case(zino_case: ritz.Case):
         pass
     return None
 
+
 def generate_tags(zino_case):
     yield "host", zino_case.router
     if zino_case.type == ritz.caseType.PORTSTATE:
@@ -255,13 +256,15 @@ def generate_tags(zino_case):
             yield "description", descr
             # GET UN
 
+
 def close_argus_incident(argus_incident):
     # TODO: Add timestamp on resolve_incident
     # TODO: Post a description of why this incident is closed
-    _logger.info('Deleting argus incident %s, buuuut its not implemented yet ... :/',
+    _logger.info('Deleting argus incident %s',
                  argus_incident.pk)
 
     _argus.resolve_incident(argus_incident)
+
 
 def create_argus_incident(zino_case: ritz.Case):
     description = describe_zino_case(zino_case)
@@ -279,8 +282,6 @@ def create_argus_incident(zino_case: ritz.Case):
                         tags=dict(generate_tags(zino_case)),
                         )
     return _argus.post_incident(incident)
-    
-
 
 
 def signal_handler(aignum, frame):

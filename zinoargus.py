@@ -137,6 +137,28 @@ def collect_metadata():
     _metadata = r2['data']
 
 
+def is_down_log(log):
+    '''Returns true if any of the log entries '''
+    return any(string in log for string in ("linkDown", "lowerLayerDown", "up to down"))
+
+
+def is_case_interesting(case: ritz.Case):
+
+    if case.type in [ritz.caseType.BFD]:
+        _logger.info('Zino case %s of type %s is ignored',
+                        case.id,
+                        case.type)
+        return False
+
+    if case.type in [ritz.caseType.PORTSTATE]:
+        logs = (l["header"] for l in case.log)
+        if not any(is_down_log(l) for l in logs):
+            return False
+
+
+    return True
+
+
 def start():
     ''' This is the Main thread of zino. It will be executed by loop() on a successfull connection,
     And thorn down on a API error from zino or argus'''
@@ -168,23 +190,13 @@ def start():
     zino_cases = dict()
     case: ritz.Case
     for case in _zino.cases_iter():
-        if case.type in [ritz.caseType.BFD]:
-            _logger.info('Zino case %s of type %s is ignored',
-                         case.id,
-                         case.type)
-            continue
-
-        if case.type not in [ritz.caseType.REACHABILITY]:
-            _logger.info('Zino case %s of type %s ignored to not overflow collection',
-                         case.id,
-                         case.type)
+        if not is_case_interesting(case):
             continue
 
         _logger.info('Zino case %s of type %s added',
                      case.id,
                      case.type)
         zino_cases[case.id] = case
-
     # All cases collected
 
     # Find cases to delete from argus (case closed in zino)
@@ -219,17 +231,32 @@ def start():
 
             elif old_state == "embryonic" and new_state == "open":
                 # Newly created case
+                case = _zino.case(update.id)
+                if not is_case_interesting(case):
+                    continue
                 _logger.debug('Creating zino case %s as incident in argus', update.id)
-                zino_cases[update.id] = _zino.case(update.id)
-                argus_incidents[update.id] = create_argus_incident(zino_cases[update.id])
+                zino_cases[update.id] = case
+                argus_incidents[update.id] = create_argus_incident(case)
             else:
                 # All other state changes
                 # zino_cases[update.id] = _zino.case(update.id)
                 pass
+        if update.type == "log":
+            _logger.debug("Log message recieved for %s checking if case is in argus", update.id)
+            case = _zino.case(update.id)
+            if update.id not in argus_incidents:
+                # Create ticket if we care about it
+                if not is_case_interesting(case):
+                    continue
+                zino_cases[update.id] = case
+                argus_incidents[update.id] = create_argus_incident(case)
+            # TODO: Check if content of log should be added as a log entry in argus
+
 
 
 
 def describe_zino_case(zino_case: ritz.Case):
+    # TODO: Get correct intial description on interface failures
     if zino_case.type == ritz.caseType.REACHABILITY:
         pass
     elif zino_case.type == ritz.caseType.BGP:

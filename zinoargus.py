@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import requests
-import configparser
 from pyargus.client import Client
 from pyargus.models import Incident
 import signal
@@ -8,7 +7,6 @@ import ritz
 import traceback
 import logging
 import argparse
-import time
 import yaml
 import sys
 from datetime import datetime
@@ -79,8 +77,6 @@ def main():
         _logger.error('No configuration file found: %s', CONFIGFILE)
         sys.exit(1)
 
-
-
     # Initiate Logging
     setup_logging()
 
@@ -146,15 +142,14 @@ def is_case_interesting(case: ritz.Case):
 
     if case.type in [ritz.caseType.BFD]:
         _logger.info('Zino case %s of type %s is ignored',
-                        case.id,
-                        case.type)
+                     case.id,
+                     case.type)
         return False
 
     if case.type in [ritz.caseType.PORTSTATE]:
-        logs = (l["header"] for l in case.log)
-        if not any(is_down_log(l) for l in logs):
+        logs = (_l["header"] for _l in case.log)
+        if not any(is_down_log(_l) for _l in logs):
             return False
-
 
     return True
 

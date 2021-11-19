@@ -138,6 +138,13 @@ def is_down_log(log):
     return any(string in log for string in ("linkDown", "lowerLayerDown", "up to down"))
 
 
+def is_production_interface(case: ritz.Case):
+    # All interfaces in production should follow the correct description syntax
+    if "descr" in case.keys():
+        return "," in case.descr
+    return False
+
+
 def is_case_interesting(case: ritz.Case):
 
     if case.type in [ritz.caseType.BFD]:
@@ -149,6 +156,8 @@ def is_case_interesting(case: ritz.Case):
     if case.type in [ritz.caseType.PORTSTATE]:
         logs = (_l["header"] for _l in case.log)
         if not any(is_down_log(_l) for _l in logs):
+            return False
+        if not is_production_interface(case):
             return False
 
     return True

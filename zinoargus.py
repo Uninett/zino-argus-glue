@@ -197,9 +197,9 @@ def start():
         if not is_case_interesting(case):
             continue
 
-        _logger.info('Zino case %s of type %s added',
-                     case.id,
-                     case.type)
+        _logger.debug('Zino case %s of type %s added to internal datastructure',
+                      case.id,
+                      case.type)
         zino_cases[case.id] = case
     # All cases collected
 
@@ -213,6 +213,10 @@ def start():
     for caseid in set(zino_cases.keys()) - set(argus_incidents.keys()):
         _logger.info('Zino case %s is not in argus, creating', caseid)
         create_argus_incident(zino_cases[caseid])
+
+    _logger.debug("List of open inciedents: ")
+    for inciedent in argus_incidents:
+        _logger.debug(inciedent)
 
     while True:
         update = _notifier.poll(timeout=1)
@@ -230,7 +234,7 @@ def start():
                                          description="Zino case closed by user")
                     del argus_incidents[update.id]
                 else:
-                    _logger.error('Can''t close zino case %s because it''s not found in argus cache', update.id)
+                    _logger.info('Can''t close zino case %s because it''s not found in argus', update.id)
 
                 if update.id in zino_cases:
                     del zino_cases[update.id]
@@ -305,7 +309,6 @@ def create_argus_incident(zino_case: ritz.Case):
         return None
 
     _logger.info('Creating argus incident for zino case %s', zino_case.id)
-    print(description)
 
     incident = Incident(start_time=zino_case.opened,
                         end_time=datetime.max,

@@ -266,21 +266,18 @@ def start():
 
 
 def describe_zino_case(zino_case: ritz.Case):
-    # TODO: Get correct intial description on interface failures
     if zino_case.type == ritz.caseType.REACHABILITY:
-        pass
+        return f"{zino_case.router} is not reachable"
     elif zino_case.type == ritz.caseType.BGP:
-        pass
+        # TODO: Lookup remote_addr name in reverse-DNS
+        return f"{zino_case.router} BGP Neighbor AS{zino_case.remote_as}/{zino_case.remote_addr} is DOWN"
     elif zino_case.type == ritz.caseType.BFD:
+        # BFD should be ignored
         pass
     elif zino_case.type == ritz.caseType.PORTSTATE:
-        return "{} port {} is MEH ({})".format(
-            zino_case.router,
-            zino_case.port,
-            zino_case.get("descr", ""),
-        )
+        return f"{zino_case.router} port {zino_case.port} changed state to DOWN ({zino_case.get('descr', '')})"
     elif zino_case.type == ritz.caseType.ALARM:
-        pass
+        return f"{zino_case.router} Active alarms reported"
     return None
 
 

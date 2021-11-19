@@ -242,11 +242,14 @@ def start():
             elif old_state == "embryonic" and new_state == "open":
                 # Newly created case
                 case = _zino.case(update.id)
-                if not is_case_interesting(case):
-                    continue
-                _logger.debug('Creating zino case %s as incident in argus', update.id)
-                zino_cases[update.id] = case
-                argus_incidents[update.id] = create_argus_incident(case)
+                if update.id not in argus_incidents:
+                    if not is_case_interesting(case):
+                        continue
+                    _logger.debug('Creating zino case %s as incident in argus', update.id)
+                    zino_cases[update.id] = case
+                    argus_incidents[update.id] = create_argus_incident(case)
+                else:
+                    _logger.debug("Zino case {} is already added to argus")
             else:
                 # All other state changes
                 # zino_cases[update.id] = _zino.case(update.id)

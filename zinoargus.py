@@ -146,6 +146,7 @@ def is_production_interface(case: ritz.Case):
 
 
 def is_case_interesting(case: ritz.Case):
+    # TODO: Add metadata from telemator and check importance against circuit type
 
     if case.type in [ritz.caseType.BFD]:
         _logger.info('Zino case %s of type %s is ignored',
@@ -263,7 +264,8 @@ def start():
                     continue
                 zino_cases[update.id] = case
                 argus_incidents[update.id] = create_argus_incident(case)
-            # TODO: Check if content of log should be added as a log entry in argus
+        # TODO: Add content of zino history as log entrys in argus
+        # TODO: Pri1 next time :)
 
 
 

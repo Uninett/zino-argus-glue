@@ -197,7 +197,8 @@ def start():
     # Find cases to delete from argus (case closed in zino)
     for incidentid in set(argus_incidents.keys()) - set(zino_cases.keys()):
         _logger.info('Zino case %s is not cached from zino, and ready to be closed in argus')
-        close_argus_incident(argus_incidents[incidentid])
+        close_argus_incident(argus_incidents[incidentid],
+                             description="This case did not exist in zino when sync script started up")
 
     # Find cases to create in argus
     for caseid in set(zino_cases.keys()) - set(argus_incidents.keys()):
@@ -216,7 +217,8 @@ def start():
                 # Closing case
                 _logger.debug('Zino case %s is closed and is being removed from argus', update.id)
                 if update.id in argus_incidents:
-                    close_argus_incident(argus_incidents[update.id])
+                    close_argus_incident(argus_incidents[update.id],
+                                         description="Zino case closed by user")
                     del argus_incidents[update.id]
                 else:
                     _logger.error('Can''t close zino case %s because it''s not found in argus cache', update.id)
@@ -279,13 +281,12 @@ def generate_tags(zino_case):
             # GET UN
 
 
-def close_argus_incident(argus_incident):
+def close_argus_incident(argus_incident, description=None):
     # TODO: Add timestamp on resolve_incident
-    # TODO: Post a description of why this incident is closed
     _logger.info('Deleting argus incident %s',
                  argus_incident.pk)
 
-    _argus.resolve_incident(argus_incident)
+    _argus.resolve_incident(argus_incident, description=description)
 
 
 def create_argus_incident(zino_case: ritz.Case):

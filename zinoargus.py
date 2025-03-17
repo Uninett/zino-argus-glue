@@ -3,7 +3,7 @@ import requests
 from pyargus.client import Client
 from pyargus.models import Incident
 import signal
-import ritz
+import zinolib as ritz
 import traceback
 import logging
 import argparse

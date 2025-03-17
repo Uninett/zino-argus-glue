@@ -1,0 +1,4 @@
+argus-api-client
+requests
+zinolib
+pyyaml

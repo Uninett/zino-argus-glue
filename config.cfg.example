@@ -11,6 +11,7 @@ zino:
   user: zinouser
   secret: 1234123412341234123412341324123413241
 
+# Optional circuit metadata from telemator
 metadata:
   ports_url: http://telemator.circuit.mapping.server/tm/curitz_circuitmapping.json
 

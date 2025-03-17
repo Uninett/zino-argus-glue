@@ -124,8 +124,11 @@ def collect_metadata():
     global _metadata
     global _config
 
-    r = requests.get(
-        url=_config.get('metadata', {}).get('ports_url'))
+    metadata_url = _config.get('metadata', {}).get('url', None)
+    if not metadata_url:
+        return
+
+    r = requests.get(url=metadata_url)
 
     r2 = r.json()
     _logger.info('Collected metadata for %s routers', len(r2['data']))

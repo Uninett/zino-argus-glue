@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zino-argus-glue"
+description = "Argus glue service for Zino"
+authors = [{name="Sikt - Kunnskapssektorens Tjenesteleverandør", email="kontakt@sikt.no"}]
+maintainers = [{name="Morten Brekkevold", email="morten.brekkevold@sikt.no"}]
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+classifiers = [
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking :: Monitoring",
+]
+dependencies = [
+    "argus-api-client",
+    "requests",
+    "zinolib",
+    "pyyaml",
+]
+dynamic = ["version"]
+
+[project.urls]
+"Homepage" = "https://github.com/Uninett/zino-argus-glue"
+
+[project.scripts]
+zinoargus = "zinoargus:main"
+
+[tool.setuptools]
+include-package-data = true
+zip-safe = false
+platforms = ["any"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"*" = [
+    "*.rst",
+]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["tests/"]
+
+[tool.setuptools_scm]
+write_to = "src/zinoargus/version.py"
+
+[tool.black]
+line-length = 88
+# Exclude files even when passed directly as argument (for MegaLinter)
+force-exclude = '''
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.hg
+    | \.mypy_cache
+    | \.nox
+    | \.tox
+    | \.venv
+    | \.ve
+    | _build
+    | buck-out
+    | build
+    | dist
+    | docs
+  )
+)
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+exclude = [
+    "docs"
+]
+# Exclude files even when passed directly as argument (for MegaLinter)
+force-exclude = true
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_also = [
+    # Don't need coverage for ellipsis used for type annotations
+    "\\.\\.\\.",
+    # Don't complain about lines excluded unless type checking
+    "if TYPE_CHECKING:",
+    # We don't need tests to cover unimplementedness
+    "raise NotImplementedError",
+]

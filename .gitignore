@@ -4,3 +4,5 @@
 .idea/
 config.cfg
 *.pyc
+*.egg-info/
+src/zinoargus/version.py

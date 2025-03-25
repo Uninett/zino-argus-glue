@@ -87,83 +87,6 @@ def main():
         _notifier = None
 
 
-def setup_logging(verbosity: int = 0):
-    """Configure logging instance"""
-
-    stdout = logging.StreamHandler()
-    stdout.setFormatter(FORMATTER)
-    _logger.addHandler(stdout)
-
-    if not verbosity:
-        _logger.setLevel(logging.WARNING)
-        stdout.setLevel(logging.WARNING)
-        _logger.critical("Enable critical logging")
-
-    elif int(verbosity) == 1:
-        _logger.setLevel(logging.INFO)
-        stdout.setLevel(logging.INFO)
-        _logger.info("Enable informational logging")
-    elif int(verbosity) > 1:
-        _logger.setLevel(logging.DEBUG)
-        stdout.setLevel(logging.DEBUG)
-        _logger.debug("Enable debug logging")
-        if int(verbosity) > 2:
-            # Also enable argus debugging
-            # Not Implemented
-            pass
-
-
-def parse_arguments() -> argparse.Namespace:
-    arguments = argparse.ArgumentParser()
-    arguments.add_argument("-v", "--verbose", action="count")
-    return arguments.parse_args()
-
-
-def collect_metadata():
-    global _metadata
-    global _config
-
-    metadata_url = _config.get("metadata", {}).get("url", None)
-    if not metadata_url:
-        return
-
-    r = requests.get(url=metadata_url)
-
-    r2 = r.json()
-    _logger.info("Collected metadata for %s routers", len(r2["data"]))
-    _logger.info(r2["data"].keys())
-    _metadata = r2["data"]
-
-
-def is_down_log(log):
-    """Returns true if any of the log entries"""
-    return any(string in log for string in ("linkDown", "lowerLayerDown", "up to down"))
-
-
-def is_production_interface(case: ritz.Case):
-    # All interfaces in production should follow the correct description syntax
-    if "descr" in case.keys():
-        return "," in case.descr
-    return False
-
-
-def is_case_interesting(case: ritz.Case):
-    # TODO: Add metadata from telemator and check importance against circuit type
-
-    if case.type in [ritz.caseType.BFD]:
-        _logger.info("Zino case %s of type %s is ignored", case.id, case.type)
-        return False
-
-    if case.type in [ritz.caseType.PORTSTATE]:
-        logs = (_l["header"] for _l in case.log)
-        if not any(is_down_log(_l) for _l in logs):
-            return False
-        if not is_production_interface(case):
-            return False
-
-    return True
-
-
 def start():
     """This the main "event loop" of the Zino-Argus glue service, called when there
     are successful connections to the Zino and Argus API, and torn down when the
@@ -298,6 +221,51 @@ def start():
         # TODO: Pri1 next time :)
 
 
+def collect_metadata():
+    global _metadata
+    global _config
+
+    metadata_url = _config.get("metadata", {}).get("url", None)
+    if not metadata_url:
+        return
+
+    r = requests.get(url=metadata_url)
+
+    r2 = r.json()
+    _logger.info("Collected metadata for %s routers", len(r2["data"]))
+    _logger.info(r2["data"].keys())
+    _metadata = r2["data"]
+
+
+def is_down_log(log):
+    """Returns true if any of the log entries"""
+    return any(string in log for string in ("linkDown", "lowerLayerDown", "up to down"))
+
+
+def is_production_interface(case: ritz.Case):
+    # All interfaces in production should follow the correct description syntax
+    if "descr" in case.keys():
+        return "," in case.descr
+    return False
+
+
+def is_case_interesting(case: ritz.Case):
+    # TODO: Add metadata from telemator and check importance against circuit type
+
+    if case.type in [ritz.caseType.BFD]:
+        _logger.info("Zino case %s of type %s is ignored", case.id, case.type)
+        return False
+
+    if case.type in [ritz.caseType.PORTSTATE]:
+        logs = (_l["header"] for _l in case.log)
+        if not any(is_down_log(_l) for _l in logs):
+            return False
+        if not is_production_interface(case):
+            return False
+
+    return True
+
+
 def describe_zino_case(zino_case: ritz.Case):
     if zino_case.type == ritz.caseType.REACHABILITY:
         return f"{zino_case.router} is not reachable"
@@ -347,6 +315,38 @@ def create_argus_incident(zino_case: ritz.Case):
         tags=dict(generate_tags(zino_case)),
     )
     return _argus.post_incident(incident)
+
+
+def setup_logging(verbosity: int = 0):
+    """Configure logging instance"""
+
+    stdout = logging.StreamHandler()
+    stdout.setFormatter(FORMATTER)
+    _logger.addHandler(stdout)
+
+    if not verbosity:
+        _logger.setLevel(logging.WARNING)
+        stdout.setLevel(logging.WARNING)
+        _logger.critical("Enable critical logging")
+
+    elif int(verbosity) == 1:
+        _logger.setLevel(logging.INFO)
+        stdout.setLevel(logging.INFO)
+        _logger.info("Enable informational logging")
+    elif int(verbosity) > 1:
+        _logger.setLevel(logging.DEBUG)
+        stdout.setLevel(logging.DEBUG)
+        _logger.debug("Enable debug logging")
+        if int(verbosity) > 2:
+            # Also enable argus debugging
+            # Not Implemented
+            pass
+
+
+def parse_arguments() -> argparse.Namespace:
+    arguments = argparse.ArgumentParser()
+    arguments.add_argument("-v", "--verbose", action="count")
+    return arguments.parse_args()
 
 
 def signal_handler(_signum, _frame):

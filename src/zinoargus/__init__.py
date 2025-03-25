@@ -25,40 +25,6 @@ _argus: Client = None
 _metadata = dict()
 
 
-def setup_logging():
-    """Configure logging instance"""
-
-    stdout = logging.StreamHandler()
-    stdout.setFormatter(FORMATTER)
-    _logger.addHandler(stdout)
-
-    verbosity = _args.verbose if _args.verbose else 0
-    if not verbosity:
-        _logger.setLevel(logging.WARNING)
-        stdout.setLevel(logging.WARNING)
-        _logger.critical("Enable critical logging")
-
-    elif int(verbosity) == 1:
-        _logger.setLevel(logging.INFO)
-        stdout.setLevel(logging.INFO)
-        _logger.info("Enable informational logging")
-    elif int(verbosity) > 1:
-        _logger.setLevel(logging.DEBUG)
-        stdout.setLevel(logging.DEBUG)
-        _logger.debug("Enable debug logging")
-        if int(verbosity) > 2:
-            # Also enable argus debugging
-            # Not Implemented
-            pass
-
-
-def parse_arguments():
-    global _args
-    arguments = argparse.ArgumentParser()
-    arguments.add_argument("-v", "--verbose", action="count")
-    _args = arguments.parse_args()
-
-
 def main():
     global _zino
     global _notifier
@@ -121,6 +87,40 @@ def main():
 
         _zino = None
         _notifier = None
+
+
+def setup_logging():
+    """Configure logging instance"""
+
+    stdout = logging.StreamHandler()
+    stdout.setFormatter(FORMATTER)
+    _logger.addHandler(stdout)
+
+    verbosity = _args.verbose if _args.verbose else 0
+    if not verbosity:
+        _logger.setLevel(logging.WARNING)
+        stdout.setLevel(logging.WARNING)
+        _logger.critical("Enable critical logging")
+
+    elif int(verbosity) == 1:
+        _logger.setLevel(logging.INFO)
+        stdout.setLevel(logging.INFO)
+        _logger.info("Enable informational logging")
+    elif int(verbosity) > 1:
+        _logger.setLevel(logging.DEBUG)
+        stdout.setLevel(logging.DEBUG)
+        _logger.debug("Enable debug logging")
+        if int(verbosity) > 2:
+            # Also enable argus debugging
+            # Not Implemented
+            pass
+
+
+def parse_arguments():
+    global _args
+    arguments = argparse.ArgumentParser()
+    arguments.add_argument("-v", "--verbose", action="count")
+    _args = arguments.parse_args()
 
 
 def collect_metadata():

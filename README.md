@@ -32,3 +32,11 @@ Argus.  Addresses and authentication tokens for these APIs are configured in
 or you can specify an alternate path to a configuration file using the `-c`
 command line option.  See [zinoargus.toml.example](./zinoargus.toml.example)
 for an example configuration file.
+
+## Copying
+
+Copyright 2025 Sikt (The Norwegian Agency for Shared Services in Education and
+Research)
+
+Licensed under the Apache License, Version 2.0; See [LICENSE](./LICENSE) for a
+full copy of the License.

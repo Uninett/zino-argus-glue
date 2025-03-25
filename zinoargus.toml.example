@@ -1,0 +1,16 @@
+[argus]
+# The Argus API url and token settings are the minimal required config settings to
+# access an Argus API server:
+url = "https://path.to.api/api/v2/"
+token = "1234543654778675647436245234"
+
+[zino]
+# The configuration used to establish a zino server session
+server = "zino.server"
+port = 8001
+user = "zinouser"
+secret = "1234123412341234123412341324123413241"
+
+[metadata]
+# Optional circuit metadata from telemator
+ports_url = "http://telemator.circuit.mapping.server/tm/curitz_circuitmapping.json"

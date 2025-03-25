@@ -6,14 +6,14 @@ import sys
 from datetime import datetime
 
 import requests
-import yaml
 import zinolib as ritz
 from pyargus.client import Client
 from pyargus.models import Incident
 
+from zinoargus.config import InvalidConfigurationError, read_configuration
+
 _logger = logging.getLogger("zinoargus")
 
-CONFIGFILE = "config.cfg"
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 _config = dict()
@@ -33,11 +33,12 @@ def main():
 
     # Read configuration
     try:
-        with open(CONFIGFILE, "r") as _f:
-            _config = yaml.safe_load(_f)
-
+        _config = read_configuration(args.config_file)
     except OSError:
-        _logger.error("No configuration file found: %s", CONFIGFILE)
+        _logger.error("No configuration file found: %s", args.config_file)
+        sys.exit(1)
+    except InvalidConfigurationError as error:
+        _logger.error("Invalid configuration in file %s: %s", args.config_file, error)
         sys.exit(1)
 
     # Initiate Logging
@@ -48,8 +49,8 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     _argus = Client(
-        api_root_url=_config.get("api", {}).get("url"),
-        token=_config.get("api", {}).get("token"),
+        api_root_url=_config.get("argus", {}).get("url"),
+        token=_config.get("argus", {}).get("token"),
     )
 
     """Initiate connectionloop to zino"""
@@ -346,6 +347,7 @@ def setup_logging(verbosity: int = 0):
 def parse_arguments() -> argparse.Namespace:
     arguments = argparse.ArgumentParser()
     arguments.add_argument("-v", "--verbose", action="count")
+    arguments.add_argument("-c", "--config-file", default="zinoargus.toml")
     return arguments.parse_args()
 
 

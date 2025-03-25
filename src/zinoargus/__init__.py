@@ -3,7 +3,6 @@ import argparse
 import logging
 import signal
 import sys
-import traceback
 from datetime import datetime
 
 import requests
@@ -75,14 +74,14 @@ def main():
     except KeyboardInterrupt:
         _logger.critical("CTRL+C detected, exiting application")
     except SystemExit:
-        _logger.critical("Recieved sigterm, exiting")
+        _logger.critical("Received sigterm, exiting")
     except Exception:  # pylint: disable=broad-except
         # Break on an unhandled exception
-        _logger.critical("Traceback from Main loop:\n%s", traceback.format_exc())
+        _logger.critical("Unhandled exception from main event loop", exc_info=True)
     finally:
         try:
             _zino.close()
-        except Exception:
+        except Exception:  # noqa
             pass
 
         _zino = None
@@ -169,9 +168,11 @@ def is_case_interesting(case: ritz.Case):
 
 
 def start():
-    """This is the Main thread of zino. It will be executed by loop() on a successfull connection,
-    And thorn down on a API error from zino or argus"""
-    _logger.info("wee are starting")
+    """This the main "event loop" of the Zino-Argus glue service, called when there
+    are successful connections to the Zino and Argus API, and torn down when the
+    connections or API's fail.
+    """
+    _logger.info("starting")
     # Collect circuit metadata
     collect_metadata()
 
@@ -210,7 +211,7 @@ def start():
             continue
 
         _logger.debug(
-            "Zino case %s of type %s added to internal datastructure",
+            "Zino case %s of type %s added to internal data structure",
             case.id,
             case.type,
         )
@@ -232,7 +233,7 @@ def start():
         _logger.info("Zino case %s is not in argus, creating", caseid)
         create_argus_incident(zino_cases[caseid])
 
-    _logger.debug("List of open inciedents: ")
+    _logger.debug("List of open incidents: ")
     for inciedent in argus_incidents:
         _logger.debug(inciedent)
 
@@ -261,7 +262,7 @@ def start():
                     del argus_incidents[update.id]
                 else:
                     _logger.info(
-                        "Can" "t close zino case %s because it" "s not found in argus",
+                        "Can't close zino case %s because it's not found in argus",
                         update.id,
                     )
 
@@ -287,7 +288,7 @@ def start():
                 pass
         if update.type == "log":
             _logger.debug(
-                "Log message recieved for %s checking if case is in argus", update.id
+                "Log message received for %s checking if case is in argus", update.id
             )
             case = _zino.case(update.id)
             if update.id not in argus_incidents:
@@ -296,7 +297,7 @@ def start():
                     continue
                 zino_cases[update.id] = case
                 argus_incidents[update.id] = create_argus_incident(case)
-        # TODO: Add content of zino history as log entrys in argus
+        # TODO: Add content of zino history as incident events in argus
         # TODO: Pri1 next time :)
 
 
@@ -351,8 +352,8 @@ def create_argus_incident(zino_case: ritz.Case):
     return _argus.post_incident(incident)
 
 
-def signal_handler(aignum, frame):
-    raise (SystemExit)
+def signal_handler(_signum, _frame):
+    raise SystemExit()
 
 
 if __name__ == "__main__":

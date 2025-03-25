@@ -17,7 +17,6 @@ CONFIGFILE = "config.cfg"
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 _config = dict()
-_args = None
 _zino: ritz.ritz = None
 _notifier: ritz.notifier = None
 _argus: Client = None
@@ -30,7 +29,7 @@ def main():
     global _argus
     global _config
 
-    parse_arguments()
+    args = parse_arguments()
 
     # Read configuration
     try:
@@ -42,7 +41,7 @@ def main():
         sys.exit(1)
 
     # Initiate Logging
-    setup_logging()
+    setup_logging(verbosity=args.verbose or 0)
 
     # Catch SIGTERM
     signal.signal(signal.SIGINT, signal_handler)
@@ -88,14 +87,13 @@ def main():
         _notifier = None
 
 
-def setup_logging():
+def setup_logging(verbosity: int = 0):
     """Configure logging instance"""
 
     stdout = logging.StreamHandler()
     stdout.setFormatter(FORMATTER)
     _logger.addHandler(stdout)
 
-    verbosity = _args.verbose if _args.verbose else 0
     if not verbosity:
         _logger.setLevel(logging.WARNING)
         stdout.setLevel(logging.WARNING)
@@ -115,11 +113,10 @@ def setup_logging():
             pass
 
 
-def parse_arguments():
-    global _args
+def parse_arguments() -> argparse.Namespace:
     arguments = argparse.ArgumentParser()
     arguments.add_argument("-v", "--verbose", action="count")
-    _args = arguments.parse_args()
+    return arguments.parse_args()
 
 
 def collect_metadata():

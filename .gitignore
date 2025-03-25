@@ -1,8 +1,13 @@
 .mypy_cache
 .vscode
 .ve/
+.tox/
 .idea/
+.coverage
 config.cfg
 *.pyc
 *.egg-info/
+reports/
+build/
+dist/
 src/zinoargus/version.py

@@ -18,8 +18,7 @@
 
 from typing import Optional, Union
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict
-from pydantic import IPvAnyAddress
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, IPvAnyAddress
 
 Host = Union[IPvAnyAddress, str]
 

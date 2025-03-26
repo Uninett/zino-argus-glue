@@ -16,6 +16,8 @@
 from os import PathLike
 from typing import Union
 
+from pydantic import ValidationError
+
 from .models import Configuration
 
 try:
@@ -38,8 +40,11 @@ def read_configuration(config_file_name: Union[str, PathLike[str]]) -> Configura
         except TOMLDecodeError as error:
             raise InvalidConfigurationError(error)
 
-    return Configuration.model_validate(obj=config_dict, strict=True)
+    try:
+        return Configuration.model_validate(obj=config_dict, strict=True)
+    except ValidationError as error:
+        raise InvalidConfigurationError(error)
 
 
 class InvalidConfigurationError(Exception):
-    """The configuration file is invalid TOML"""
+    """The configuration file is invalid"""

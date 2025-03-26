@@ -342,20 +342,18 @@ def setup_logging(verbosity: int = 0):
 
     stdout = logging.StreamHandler()
     stdout.setFormatter(FORMATTER)
-    _logger.addHandler(stdout)
+    root = logging.getLogger()
+    root.addHandler(stdout)
 
     if not verbosity:
-        _logger.setLevel(logging.WARNING)
-        stdout.setLevel(logging.WARNING)
+        root.setLevel(logging.WARNING)
         _logger.critical("Enable critical logging")
 
     elif int(verbosity) == 1:
-        _logger.setLevel(logging.INFO)
-        stdout.setLevel(logging.INFO)
+        root.setLevel(logging.INFO)
         _logger.info("Enable informational logging")
     elif int(verbosity) > 1:
-        _logger.setLevel(logging.DEBUG)
-        stdout.setLevel(logging.DEBUG)
+        root.setLevel(logging.DEBUG)
         _logger.debug("Enable debug logging")
         if int(verbosity) > 2:
             # Also enable argus debugging

@@ -344,6 +344,8 @@ def setup_logging(verbosity: int = 0):
     stdout.setFormatter(FORMATTER)
     root = logging.getLogger()
     root.addHandler(stdout)
+    # Disabling redundant exception logging from simple_rest_client library
+    logging.getLogger("simple_rest_client.decorators").setLevel(logging.CRITICAL)
 
     if not verbosity:
         root.setLevel(logging.WARNING)

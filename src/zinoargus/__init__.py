@@ -24,6 +24,7 @@ import requests
 import zinolib as ritz
 from pyargus.client import Client
 from pyargus.models import Incident
+from simple_rest_client.exceptions import ClientConnectionError
 
 from zinoargus.config import (
     Configuration,
@@ -90,6 +91,10 @@ def main():
         _logger.critical("Unable to authenticate against zino, retrying in 30sec")
     except ritz.NotConnectedError:
         _logger.critical("Lost connection with zino, retrying in 30sec")
+    except ConnectionRefusedError:
+        _logger.critical("Connection refused by Zino (%s:%s)", _config.zino.server, _config.zino.port)
+    except ClientConnectionError:
+        _logger.critical("Connection refused by Argus (%s)", _config.argus.url)
     except KeyboardInterrupt:
         _logger.critical("CTRL+C detected, exiting application")
     except SystemExit:

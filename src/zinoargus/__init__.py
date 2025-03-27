@@ -25,13 +25,17 @@ import zinolib as ritz
 from pyargus.client import Client
 from pyargus.models import Incident
 
-from zinoargus.config import InvalidConfigurationError, read_configuration
+from zinoargus.config import (
+    Configuration,
+    InvalidConfigurationError,
+    read_configuration,
+)
 
 _logger = logging.getLogger("zinoargus")
 
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-_config = dict()
+_config: Configuration = None
 _zino: ritz.ritz = None
 _notifier: ritz.notifier = None
 _argus: Client = None
@@ -64,17 +68,17 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     _argus = Client(
-        api_root_url=_config.get("argus", {}).get("url"),
-        token=_config.get("argus", {}).get("token"),
+        api_root_url=str(_config.argus.url),
+        token=_config.argus.token,
     )
 
     """Initiate connectionloop to zino"""
     try:
         _zino = ritz.ritz(
-            server=_config.get("zino", {}).get("server"),
-            port=_config.get("zino", {}).get("port"),
-            username=_config.get("zino", {}).get("user"),
-            password=_config.get("zino", {}).get("secret"),
+            server=str(_config.zino.server),
+            port=_config.zino.port,
+            username=_config.zino.user,
+            password=_config.zino.secret,
         )
         _zino.connect()
         _notifier = _zino.init_notifier()
@@ -241,7 +245,7 @@ def collect_metadata():
     global _metadata
     global _config
 
-    metadata_url = _config.get("metadata", {}).get("url", None)
+    metadata_url = _config.metadata.ports_url
     if not metadata_url:
         return
 

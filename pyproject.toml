@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "argus-api-client",
     "requests",
+    "pydantic<2.11",
     "zinolib",
     "tomli; python_version < '3.11'",
 ]

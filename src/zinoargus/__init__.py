@@ -24,6 +24,7 @@ import requests
 import zinolib as ritz
 from pyargus.client import Client
 from pyargus.models import Incident
+from simple_rest_client.exceptions import ClientConnectionError
 
 from zinoargus.config import (
     Configuration,
@@ -90,6 +91,10 @@ def main():
         _logger.critical("Unable to authenticate against zino, retrying in 30sec")
     except ritz.NotConnectedError:
         _logger.critical("Lost connection with zino, retrying in 30sec")
+    except ConnectionRefusedError:
+        _logger.critical("Connection refused by Zino (%s:%s)", _config.zino.server, _config.zino.port)
+    except ClientConnectionError:
+        _logger.critical("Connection refused by Argus (%s)", _config.argus.url)
     except KeyboardInterrupt:
         _logger.critical("CTRL+C detected, exiting application")
     except SystemExit:
@@ -342,20 +347,20 @@ def setup_logging(verbosity: int = 0):
 
     stdout = logging.StreamHandler()
     stdout.setFormatter(FORMATTER)
-    _logger.addHandler(stdout)
+    root = logging.getLogger()
+    root.addHandler(stdout)
+    # Disabling redundant exception logging from simple_rest_client library
+    logging.getLogger("simple_rest_client.decorators").setLevel(logging.CRITICAL)
 
     if not verbosity:
-        _logger.setLevel(logging.WARNING)
-        stdout.setLevel(logging.WARNING)
+        root.setLevel(logging.WARNING)
         _logger.critical("Enable critical logging")
 
     elif int(verbosity) == 1:
-        _logger.setLevel(logging.INFO)
-        stdout.setLevel(logging.INFO)
+        root.setLevel(logging.INFO)
         _logger.info("Enable informational logging")
     elif int(verbosity) > 1:
-        _logger.setLevel(logging.DEBUG)
-        stdout.setLevel(logging.DEBUG)
+        root.setLevel(logging.DEBUG)
         _logger.debug("Enable debug logging")
         if int(verbosity) > 2:
             # Also enable argus debugging

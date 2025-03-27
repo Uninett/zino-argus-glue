@@ -32,6 +32,11 @@ from zinoargus.config import (
     read_configuration,
 )
 
+# A map of Zino case numbers to Zino case objects
+CaseMap = dict[int, ritz.Case]
+# A map of Zino case numbers to Argus incident objects
+IncidentMap = dict[int, Incident]
+
 _logger = logging.getLogger("zinoargus")
 
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -92,7 +97,9 @@ def main():
     except ritz.NotConnectedError:
         _logger.critical("Lost connection with zino, retrying in 30sec")
     except ConnectionRefusedError:
-        _logger.critical("Connection refused by Zino (%s:%s)", _config.zino.server, _config.zino.port)
+        _logger.critical(
+            "Connection refused by Zino (%s:%s)", _config.zino.server, _config.zino.port
+        )
     except ClientConnectionError:
         _logger.critical("Connection refused by Argus (%s)", _config.argus.url)
     except KeyboardInterrupt:
@@ -113,7 +120,7 @@ def main():
 
 
 def start():
-    """This the main "event loop" of the Zino-Argus glue service, called when there
+    """This is the main "event loop" of the Zino-Argus glue service, called when there
     are successful connections to the Zino and Argus API, and torn down when the
     connections or API's fail.
     """
@@ -121,69 +128,96 @@ def start():
     # Collect circuit metadata
     collect_metadata()
 
-    # Get all current incidents from Argus
-    argus_incidents = dict()
-    incident: Incident
+    argus_incidents, zino_cases = synchronize_all_cases()
+    synchronize_continuously(argus_incidents, zino_cases)
+
+
+def synchronize_all_cases() -> tuple[IncidentMap, CaseMap]:
+    """Fully synchronize cases/incidents between Zino and Argus, returning maps of all
+    known Argus incidents and all Zino cases.
+    """
+    argus_incidents = get_all_my_argus_incidents()
+    zino_cases = get_all_interesting_zino_cases()
+
+    close_argus_incidents_missing_from_zino(argus_incidents, zino_cases)
+    create_argus_incidents_from_new_zino_cases(argus_incidents, zino_cases)
+
+    return argus_incidents, zino_cases
+
+
+def get_all_my_argus_incidents() -> IncidentMap:
+    """Get a map of all Argus incidents that belong to the source system represented by
+    this glue service instance.
+    """
+    argus_incidents: IncidentMap = {}
     for incident in _argus.get_my_incidents(open=True):
         if not incident.source_incident_id:
             _logger.error(
-                'Ignoring incidents no source_incident_id set pk:%s, "%s"',
+                "Ignoring incident %s with no 'source_incident_id' set (%r)",
                 incident.pk,
                 incident.description,
             )
             continue
         if not incident.source_incident_id.isnumeric():
             _logger.error(
-                "Ignore incidents %s source_incident_id is not a numeric value (%s)",
+                "Ignoring incident %s (%r), source_incident_id is not a numeric value (%r)",
                 incident.pk,
-                repr(incident.source_incident_id),
+                incident.description,
+                incident.source_incident_id,
             )
             continue
-        _logger.info(
-            "Adding argus incidents %s, zino: %s, %s",
+        _logger.debug(
+            "Argus incident %s (zino case #%s) added to to internal data structures (%r)",
             incident.pk,
             incident.source_incident_id,
-            repr(incident.description),
+            incident.description,
         )
 
         argus_incidents[int(incident.source_incident_id)] = incident
+    return argus_incidents
 
-    # Collecting all cases from Zino
-    zino_cases = dict()
+
+def get_all_interesting_zino_cases() -> CaseMap:
+    """Returns a map of all Zino cases that are deeming interesting enough to
+    synchronize to Argus.
+    """
+    zino_cases: CaseMap = {}
     case: ritz.Case
     for case in _zino.cases_iter():
         if not is_case_interesting(case):
             continue
 
         _logger.debug(
-            "Zino case %s of type %s added to internal data structure",
+            "Zino case #%s of type %s (%s) added to internal data structure",
             case.id,
             case.type,
+            case.get("router"),
         )
         zino_cases[case.id] = case
-    # All cases collected
 
-    # Find cases to delete from argus (case closed in zino)
-    for incidentid in set(argus_incidents.keys()) - set(zino_cases.keys()):
+    return zino_cases
+
+
+def create_argus_incidents_from_new_zino_cases(argus_incidents, zino_cases):
+    for case_id in set(zino_cases) - set(argus_incidents):
+        _logger.info("Zino case %s is not in Argus, creating", case_id)
+        create_argus_incident(zino_cases[case_id])
+
+
+def close_argus_incidents_missing_from_zino(argus_incidents, zino_cases):
+    for case_id in set(argus_incidents) - set(zino_cases):
         _logger.info(
-            "Zino case %s is not cached from zino, and ready to be closed in argus"
+            "Zino case %s is not cached from zino, and ready to be closed in argus",
+            case_id,
         )
         close_argus_incident(
-            argus_incidents[incidentid],
-            description="This case did not exist in zino when sync script started up",
+            argus_incidents[case_id],
+            description="This case did not exist in zino when glue service was started",
         )
 
-    # Find cases to create in argus
-    for caseid in set(zino_cases.keys()) - set(argus_incidents.keys()):
-        _logger.info("Zino case %s is not in argus, creating", caseid)
-        create_argus_incident(zino_cases[caseid])
 
-    _logger.debug("List of open incidents: ")
-    for inciedent in argus_incidents:
-        _logger.debug(inciedent)
-    for incident in argus_incidents:
-        _logger.debug(incident)
-
+def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
+    """Continuously "poll" the Zino notification channel and update Argus accordingly"""
     while True:
         update = _notifier.poll(timeout=1)
         if not update:

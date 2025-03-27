@@ -28,9 +28,12 @@ from pyargus.models import Incident
 from simple_rest_client.exceptions import ClientConnectionError
 
 from zinoargus.config import (
-    Configuration,
     InvalidConfigurationError,
     read_configuration,
+)
+from zinoargus.config.models import (
+    Configuration,
+    ZinoConfiguration,
 )
 
 # A map of Zino case numbers to Zino case objects
@@ -81,18 +84,10 @@ def main():
 
     """Initiate connectionloop to zino"""
     try:
-        _zino = ritz.ritz(
-            server=str(_config.zino.server),
-            port=_config.zino.port,
-            username=_config.zino.user,
-            password=_config.zino.secret,
-        )
-        _zino.connect()
-        _notifier = _zino.init_notifier()
-
+        _zino, _notifier = connect_to_zino(_config.zino)
         start()
 
-        # We went out of the loop, reconnect
+        # TODO: If the Zino connection errors out, this should try to reconnect rather than die
     except ritz.AuthenticationError:
         _logger.critical("Unable to authenticate against zino, retrying in 30sec")
     except ritz.NotConnectedError:
@@ -118,6 +113,21 @@ def main():
 
         _zino = None
         _notifier = None
+
+
+def connect_to_zino(
+    configuration: ZinoConfiguration,
+) -> tuple[ritz.ritz, ritz.notifier]:
+    """Connects to Zino and returns the ritz instance and notifier instance"""
+    zino = ritz.ritz(
+        server=configuration.server,
+        port=configuration.port,
+        username=configuration.user,
+        password=configuration.secret,
+    )
+    zino.connect()
+    notifier = zino.init_notifier()
+    return zino, notifier
 
 
 def start():

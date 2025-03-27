@@ -45,7 +45,7 @@ _config: Configuration = None
 _zino: ritz.ritz = None
 _notifier: ritz.notifier = None
 _argus: Client = None
-_metadata = dict()
+_circuit_metadata = dict()
 
 
 def main():
@@ -125,8 +125,7 @@ def start():
     connections or API's fail.
     """
     _logger.info("starting")
-    # Collect circuit metadata
-    collect_metadata()
+    collect_circuit_metadata()
 
     argus_incidents, zino_cases = synchronize_all_cases()
     synchronize_continuously(argus_incidents, zino_cases)
@@ -282,8 +281,8 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
         # TODO: Pri1 next time :)
 
 
-def collect_metadata():
-    global _metadata
+def collect_circuit_metadata():
+    global _circuit_metadata
     global _config
 
     metadata_url = _config.metadata.ports_url
@@ -295,7 +294,7 @@ def collect_metadata():
     r2 = r.json()
     _logger.info("Collected metadata for %s routers", len(r2["data"]))
     _logger.info(r2["data"].keys())
-    _metadata = r2["data"]
+    _circuit_metadata = r2["data"]
 
 
 def is_down_log(log):

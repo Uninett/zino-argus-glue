@@ -23,6 +23,13 @@ def test_when_configuration_file_is_invalid_toml_it_should_raise_invalid_configu
         read_configuration(syntax_error_configuration_file)
 
 
+def test_when_configuration_file_has_invalid_value_it_should_raise_invalid_configuration_error(
+    invalid_value_configuration_file,
+):
+    with pytest.raises(InvalidConfigurationError):
+        read_configuration(invalid_value_configuration_file)
+
+
 @pytest.fixture
 def valid_configuration_file(tmp_path):
     name = tmp_path / "zinoargus.toml"
@@ -31,7 +38,7 @@ def valid_configuration_file(tmp_path):
             """[argus]
             url = "https://argus.example.org/api/v2"
             token = "secret"
-            
+
             [zino]
             server = "zino.example.org"
             port = 8001
@@ -49,6 +56,25 @@ def syntax_error_configuration_file(tmp_path):
         conf.write(
             """[argus
             url = "https://argus.example.org/api/v2
+            """
+        )
+    yield name
+
+
+@pytest.fixture
+def invalid_value_configuration_file(tmp_path):
+    name = tmp_path / "zinoargus.toml"
+    with open(name, "w") as conf:
+        conf.write(
+            """[argus]
+            url = "https://argus.example.org/api/v2"
+            token = "secret"
+
+            [zino]
+            server = "zino.example.org"
+            port = "badportvalue"
+            user = "zinouser"
+            secret = "secret"
             """
         )
     yield name

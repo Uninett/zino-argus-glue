@@ -99,3 +99,8 @@ exclude_also = [
     # We don't need tests to cover unimplementedness
     "raise NotImplementedError",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+]

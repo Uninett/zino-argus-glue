@@ -233,10 +233,11 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
         if not update:
             # No notification received
             continue
-        print(
-            'Update on case id:"{}" type:"{}" info:"{}"'.format(
-                update.id, update.type, update.info
-            )
+        _logger.debug(
+            "Update on Zino case id:%s type:%s info:%s",
+            update.id,
+            update.type,
+            update.info,
         )
         if update.type == "state":
             old_state, new_state = update.info.split(" ", 1)

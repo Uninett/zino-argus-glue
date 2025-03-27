@@ -19,6 +19,7 @@ import logging
 import signal
 import sys
 from datetime import datetime
+from typing import Optional
 
 import requests
 import zinolib as ritz
@@ -41,10 +42,10 @@ _logger = logging.getLogger("zinoargus")
 
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-_config: Configuration = None
-_zino: ritz.ritz = None
-_notifier: ritz.notifier = None
-_argus: Client = None
+_config: Optional[Configuration] = None
+_zino: Optional[ritz.ritz] = None
+_notifier: Optional[ritz.notifier] = None
+_argus: Optional[Client] = None
 _circuit_metadata = dict()
 
 

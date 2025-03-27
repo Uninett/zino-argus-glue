@@ -32,6 +32,7 @@ from zinoargus.config import (
     read_configuration,
 )
 from zinoargus.config.models import (
+    ArgusConfiguration,
     Configuration,
     ZinoConfiguration,
 )
@@ -77,10 +78,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    _argus = Client(
-        api_root_url=str(_config.argus.url),
-        token=_config.argus.token,
-    )
+    _argus = get_argus_client(_config.argus)
 
     """Initiate connectionloop to zino"""
     try:
@@ -128,6 +126,14 @@ def connect_to_zino(
     zino.connect()
     notifier = zino.init_notifier()
     return zino, notifier
+
+
+def get_argus_client(configuration: ArgusConfiguration) -> Client:
+    """Returns a new Argus client instance"""
+    return Client(
+        api_root_url=str(configuration.url),
+        token=configuration.token,
+    )
 
 
 def start():

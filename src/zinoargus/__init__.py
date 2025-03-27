@@ -181,11 +181,13 @@ def start():
     _logger.debug("List of open incidents: ")
     for inciedent in argus_incidents:
         _logger.debug(inciedent)
+    for incident in argus_incidents:
+        _logger.debug(incident)
 
     while True:
         update = _notifier.poll(timeout=1)
         if not update:
-            # No notification recieved
+            # No notification received
             continue
         print(
             'Update on case id:"{}" type:"{}" info:"{}"'.format(

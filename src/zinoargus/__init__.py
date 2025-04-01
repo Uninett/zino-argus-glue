@@ -28,9 +28,13 @@ from pyargus.models import Incident
 from simple_rest_client.exceptions import ClientConnectionError
 
 from zinoargus.config import (
-    Configuration,
     InvalidConfigurationError,
     read_configuration,
+)
+from zinoargus.config.models import (
+    ArgusConfiguration,
+    Configuration,
+    ZinoConfiguration,
 )
 
 # A map of Zino case numbers to Zino case objects
@@ -74,25 +78,14 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    _argus = Client(
-        api_root_url=str(_config.argus.url),
-        token=_config.argus.token,
-    )
+    _argus = get_argus_client(_config.argus)
 
     """Initiate connectionloop to zino"""
     try:
-        _zino = ritz.ritz(
-            server=str(_config.zino.server),
-            port=_config.zino.port,
-            username=_config.zino.user,
-            password=_config.zino.secret,
-        )
-        _zino.connect()
-        _notifier = _zino.init_notifier()
-
+        _zino, _notifier = connect_to_zino(_config.zino)
         start()
 
-        # We went out of the loop, reconnect
+        # TODO: If the Zino connection errors out, this should try to reconnect rather than die
     except ritz.AuthenticationError:
         _logger.critical("Unable to authenticate against zino, retrying in 30sec")
     except ritz.NotConnectedError:
@@ -118,6 +111,29 @@ def main():
 
         _zino = None
         _notifier = None
+
+
+def connect_to_zino(
+    configuration: ZinoConfiguration,
+) -> tuple[ritz.ritz, ritz.notifier]:
+    """Connects to Zino and returns the ritz instance and notifier instance"""
+    zino = ritz.ritz(
+        server=configuration.server,
+        port=configuration.port,
+        username=configuration.user,
+        password=configuration.secret,
+    )
+    zino.connect()
+    notifier = zino.init_notifier()
+    return zino, notifier
+
+
+def get_argus_client(configuration: ArgusConfiguration) -> Client:
+    """Returns a new Argus client instance"""
+    return Client(
+        api_root_url=str(configuration.url),
+        token=configuration.token,
+    )
 
 
 def start():
@@ -223,10 +239,11 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
         if not update:
             # No notification received
             continue
-        print(
-            'Update on case id:"{}" type:"{}" info:"{}"'.format(
-                update.id, update.type, update.info
-            )
+        _logger.debug(
+            "Update on Zino case id:%s type:%s info:%s",
+            update.id,
+            update.type,
+            update.info,
         )
         if update.type == "state":
             old_state, new_state = update.info.split(" ", 1)

@@ -118,7 +118,7 @@ def connect_to_zino(
 ) -> tuple[ritz.ritz, ritz.notifier]:
     """Connects to Zino and returns the ritz instance and notifier instance"""
     zino = ritz.ritz(
-        server=configuration.server,
+        server=str(configuration.server),
         port=configuration.port,
         username=configuration.user,
         password=configuration.secret,

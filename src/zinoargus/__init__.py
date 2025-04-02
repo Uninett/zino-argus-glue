@@ -26,6 +26,7 @@ import zinolib as ritz
 from pyargus.client import Client
 from pyargus.models import Incident
 from simple_rest_client.exceptions import ClientConnectionError
+from zinolib.ritz import NotifierResponse
 
 from zinoargus.config import (
     InvalidConfigurationError,
@@ -237,7 +238,7 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
     while True:
         update = _notifier.poll(timeout=1)
         if not update:
-            # No notification received
+            # No notification received (i.e. timeout occurred)
             continue
         _logger.debug(
             "Update on Zino case id:%s type:%s info:%s",
@@ -245,58 +246,70 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
             update.type,
             update.info,
         )
+
+        # Ensure we have the details on both the Zino Case and Argus Incident being updated
+        if update.id not in zino_cases:
+            # We didn't know about this case ID before, so we need to fetch it
+            zino_cases[update.id] = _zino.case(update.id)
+        case = zino_cases[update.id]
+
+        if not is_case_interesting(case):
+            # Ignore this update, as it's not interesting to us
+            continue
+
+        incident = get_or_make_argus_incident_for_zino_case(
+            update.id, case, argus_incidents
+        )
+
         if update.type == "state":
-            old_state, new_state = update.info.split(" ", 1)
-            if new_state == "closed":
-                # Closing case
-                _logger.debug(
-                    "Zino case %s is closed and is being removed from argus", update.id
-                )
-                if update.id in argus_incidents:
-                    close_argus_incident(
-                        argus_incidents[update.id],
-                        description="Zino case closed by user",
-                    )
-                    del argus_incidents[update.id]
-                else:
-                    _logger.info(
-                        "Can't close zino case %s because it's not found in argus",
-                        update.id,
-                    )
+            update_state(update, case, incident, zino_cases, argus_incidents)
 
-                if update.id in zino_cases:
-                    del zino_cases[update.id]
-
-            elif old_state == "embryonic" and new_state == "open":
-                # Newly created case
-                case = _zino.case(update.id)
-                if update.id not in argus_incidents:
-                    if not is_case_interesting(case):
-                        continue
-                    _logger.debug(
-                        "Creating zino case %s as incident in argus", update.id
-                    )
-                    zino_cases[update.id] = case
-                    argus_incidents[update.id] = create_argus_incident(case)
-                else:
-                    _logger.debug("Zino case {} is already added to argus")
-            else:
-                # All other state changes
-                # zino_cases[update.id] = _zino.case(update.id)
-                pass
-        if update.type == "log":
-            _logger.debug(
-                "Log message received for %s checking if case is in argus", update.id
-            )
-            case = _zino.case(update.id)
-            if update.id not in argus_incidents:
-                # Create ticket if we care about it
-                if not is_case_interesting(case):
-                    continue
-                zino_cases[update.id] = case
-                argus_incidents[update.id] = create_argus_incident(case)
         # TODO: Add content of zino history as incident events in argus
         # TODO: Pri1 next time :)
+
+
+def get_or_make_argus_incident_for_zino_case(
+    case_id: int, case: ritz.Case, argus_incidents: IncidentMap
+) -> Incident:
+    """Tries to get the Argus incident for a Zino case (even closed ones), creating
+    a new one if it doesn't exist.
+    """
+    if case_id in argus_incidents:
+        return argus_incidents[case_id]
+
+    incidents = _argus.get_my_incidents(source_incident_id=case_id)
+    incident = next(incidents, None)
+    if incident:
+        argus_incidents[case_id] = incident
+        return incident
+
+    return create_argus_incident(case)
+
+
+def update_state(
+    update: NotifierResponse,
+    case: ritz.Case,
+    incident: Incident,
+    zino_cases: CaseMap,
+    argus_incidents: IncidentMap,
+):
+    """Handles a state update notification from Zino"""
+    old_state, new_state = update.info.split(" ", 1)
+    if new_state == "closed":
+        # Closing case
+        _logger.debug(
+            "Zino case %s is closed and is being removed from argus", update.id
+        )
+        if incident.open:
+            incident = close_argus_incident(
+                incident, description="Zino case closed by user"
+            )
+            # keep track of closed incidents in case of further updates
+            argus_incidents[update.id] = incident
+        zino_cases.pop(update.id, None)
+    else:
+        # Any other state changes should just be updated internally
+        zino_cases[update.id] = case
 
 
 def collect_circuit_metadata():

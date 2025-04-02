@@ -370,11 +370,11 @@ def generate_tags(zino_case):
             # GET UN
 
 
-def close_argus_incident(argus_incident, description=None):
+def close_argus_incident(argus_incident, description=None) -> Incident:
     # TODO: Add timestamp on resolve_incident
     _logger.info("Deleting argus incident %s", argus_incident.pk)
 
-    _argus.resolve_incident(argus_incident, description=description)
+    return _argus.resolve_incident(argus_incident, description=description)
 
 
 def create_argus_incident(zino_case: ritz.Case):

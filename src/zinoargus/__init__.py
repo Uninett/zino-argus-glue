@@ -307,10 +307,9 @@ def update_state(
             "Zino case %s is closed and is being removed from argus", update.id
         )
         if incident.open:
-            incident = close_argus_incident(
-                incident, description="Zino case closed by user"
-            )
+            close_argus_incident(incident, description="Zino case closed by user")
             # keep track of closed incidents in case of further updates
+            incident.open = False
             argus_incidents[update.id] = incident
         zino_cases.pop(update.id, None)
     else:
@@ -389,11 +388,11 @@ def generate_tags(zino_case):
             # GET UN
 
 
-def close_argus_incident(argus_incident, description=None) -> Incident:
+def close_argus_incident(argus_incident, description=None) -> None:
     # TODO: Add timestamp on resolve_incident
     _logger.info("Deleting argus incident %s", argus_incident.pk)
 
-    return _argus.resolve_incident(argus_incident, description=description)
+    _argus.resolve_incident(argus_incident, description=description)
 
 
 def create_argus_incident(zino_case: ritz.Case):

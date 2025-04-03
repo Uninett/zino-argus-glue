@@ -467,7 +467,7 @@ def close_argus_incident(
     incident.open = False
 
 
-def get_last_case_history_entry(case: ritz.Case) -> dict:
+def get_last_case_history_entry(case: ritz.Case) -> Optional[dict]:
     """Returns the last history entry for a case"""
     history = _zino.get_history(case.id)
     if not history:

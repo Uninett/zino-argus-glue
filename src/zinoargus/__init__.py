@@ -467,7 +467,9 @@ def create_argus_incident(zino_case: ritz.Case):
         description=description,
         tags=dict(generate_tags(zino_case)),
     )
-    return _argus.post_incident(incident)
+    incident = _argus.post_incident(incident)
+    synchronize_case_history(zino_case, incident)
+    return incident
 
 
 def setup_logging(verbosity: int = 0):

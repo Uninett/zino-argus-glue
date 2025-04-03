@@ -247,6 +247,12 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
             update.info,
         )
 
+        if update.type == "scavenged":
+            # This Zino case can no longer be fetched from Zino, so we need to forget it
+            zino_cases.pop(update.id, None)
+            argus_incidents.pop(update.id, None)
+            continue
+
         # Ensure we have the details on both the Zino Case and Argus Incident being updated
         if update.id not in zino_cases:
             # We didn't know about this case ID before, so we need to fetch it

@@ -18,7 +18,7 @@ import argparse
 import logging
 import signal
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import requests
@@ -403,9 +403,10 @@ def create_argus_incident(zino_case: ritz.Case):
         return None
 
     _logger.info("Creating argus incident for zino case %s", zino_case.id)
-
+    # ritz/zinolib datetime objects are timezone-naive, given in UTC
+    timestamp_opened = zino_case.opened.replace(tzinfo=timezone.utc)
     incident = Incident(
-        start_time=zino_case.opened,
+        start_time=timestamp_opened,
         end_time=datetime.max,
         source_incident_id=zino_case.id,
         description=description,

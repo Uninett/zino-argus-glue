@@ -24,7 +24,7 @@ from typing import Optional
 import requests
 import zinolib as ritz
 from pyargus.client import Client
-from pyargus.models import Incident
+from pyargus.models import Event, Incident
 from simple_rest_client.exceptions import ClientConnectionError
 from zinolib.ritz import NotifierResponse
 
@@ -46,6 +46,7 @@ IncidentMap = dict[int, Incident]
 _logger = logging.getLogger("zinoargus")
 
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+HISTORY_EVENT_TYPE = "OTH"  # Other
 
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
@@ -270,8 +271,63 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
         if update.type == "state":
             update_state(update, case, incident, zino_cases, argus_incidents)
 
-        # TODO: Add content of zino history as incident events in argus
-        # TODO: Pri1 next time :)
+        if update.type == "history":
+            synchronize_case_history(case, incident)
+
+
+def synchronize_case_history(case: ritz.Case, incident: Incident):
+    """Synchronizes case history to an Argus incident.
+
+    This is slightly tricky, since there is no explicit mapping between Zino case
+    history entries and Argus incident events, so there is some guesswork involved -
+    mainly by comparing timestamps.
+
+    If two history entries somehow have the same timestamp, the current algorithm
+    cannot handle it and which of the two history entries are transmitted to Argus is
+    undefined.
+
+    A specific case of this applies to the initial history entry for all Zino cases:
+    Its timestamp is always the same as the case's "opened" timestamp, but contains
+    nothing interesting other than a "state change from embryonic to opened", so it
+    conveys no more information than the initial "incident start" event and is easily
+    omitted (this algorithm will see the STA and OTH events as duplicates).
+    """
+    history = _zino.get_history(case.id)
+    existing_events = _argus.get_incident_events(incident)
+    # Filter out events that seem to originate from this glue service actor:
+    my_actor = next(event.actor for event in existing_events if event.type == "STA")
+    my_events_by_timestamp = {
+        event.timestamp: event for event in existing_events if event.actor == my_actor
+    }
+
+    new_events = []
+    for entry in history:
+        event = make_event_from_history_entry(entry)
+        if event.timestamp in my_events_by_timestamp:
+            # Event likely already exists in Argus
+            continue
+        new_events.append(event)
+    _logger.debug(
+        "Adding %s new history events to incident %s", len(new_events), incident.pk
+    )
+    for event in new_events:
+        _argus.post_incident_event(incident, event)
+
+
+def make_event_from_history_entry(entry: dict) -> Event:
+    """Makes an Argus Incident Event data object from a Zino history entry"""
+    description = entry.get("header")
+    if entry.get("log"):
+        description += "\n" + "\n".join(entry.get("log"))
+    # datetime objects from ritz/zinolib are timezone-naive, even if the timestamps
+    # retrieved from Zino are specifically UTC.  We need to assign a UTC timezone to
+    # these datetime objects in order to ensure correct timestamps in Argus
+    timestamp = entry.get("date").replace(tzinfo=timezone.utc)
+    return Event(
+        timestamp=timestamp,
+        description=description,
+        type=HISTORY_EVENT_TYPE,
+    )
 
 
 def get_or_make_argus_incident_for_zino_case(
@@ -411,7 +467,9 @@ def create_argus_incident(zino_case: ritz.Case):
         description=description,
         tags=dict(generate_tags(zino_case)),
     )
-    return _argus.post_incident(incident)
+    incident = _argus.post_incident(incident)
+    synchronize_case_history(zino_case, incident)
+    return incident
 
 
 def setup_logging(verbosity: int = 0):

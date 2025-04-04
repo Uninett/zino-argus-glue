@@ -48,6 +48,7 @@ _logger = logging.getLogger("zinoargus")
 
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 HISTORY_EVENT_TYPE = "OTH"  # Other
+POLL_TIMEOUT = 30  # seconds
 
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
@@ -238,7 +239,7 @@ def close_argus_incidents_missing_from_zino(argus_incidents, zino_cases):
 def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
     """Continuously "poll" the Zino notification channel and update Argus accordingly"""
     while True:
-        update = _notifier.poll(timeout=1)
+        update = _notifier.poll(timeout=POLL_TIMEOUT)
         if not update:
             # No notification received (i.e. timeout occurred)
             continue

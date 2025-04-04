@@ -18,7 +18,7 @@ import argparse
 import logging
 import signal
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import requests
@@ -247,6 +247,12 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
             update.info,
         )
 
+        if update.type == "scavenged":
+            # This Zino case can no longer be fetched from Zino, so we need to forget it
+            zino_cases.pop(update.id, None)
+            argus_incidents.pop(update.id, None)
+            continue
+
         # Ensure we have the details on both the Zino Case and Argus Incident being updated
         if update.id not in zino_cases:
             # We didn't know about this case ID before, so we need to fetch it
@@ -301,10 +307,9 @@ def update_state(
             "Zino case %s is closed and is being removed from argus", update.id
         )
         if incident.open:
-            incident = close_argus_incident(
-                incident, description="Zino case closed by user"
-            )
+            close_argus_incident(incident, description="Zino case closed by user")
             # keep track of closed incidents in case of further updates
+            incident.open = False
             argus_incidents[update.id] = incident
         zino_cases.pop(update.id, None)
     else:
@@ -383,11 +388,11 @@ def generate_tags(zino_case):
             # GET UN
 
 
-def close_argus_incident(argus_incident, description=None) -> Incident:
+def close_argus_incident(argus_incident, description=None) -> None:
     # TODO: Add timestamp on resolve_incident
     _logger.info("Deleting argus incident %s", argus_incident.pk)
 
-    return _argus.resolve_incident(argus_incident, description=description)
+    _argus.resolve_incident(argus_incident, description=description)
 
 
 def create_argus_incident(zino_case: ritz.Case):
@@ -397,9 +402,10 @@ def create_argus_incident(zino_case: ritz.Case):
         return None
 
     _logger.info("Creating argus incident for zino case %s", zino_case.id)
-
+    # ritz/zinolib datetime objects are timezone-naive, given in UTC
+    timestamp_opened = zino_case.opened.replace(tzinfo=timezone.utc)
     incident = Incident(
-        start_time=zino_case.opened,
+        start_time=timestamp_opened,
         end_time=datetime.max,
         source_incident_id=zino_case.id,
         description=description,

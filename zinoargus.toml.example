@@ -11,6 +11,14 @@ port = 8001
 user = "zinouser"
 secret = "1234123412341234123412341324123413241"
 
+# Synchronization behavior options
+[sync]
+#  Argus incident acknowledgments can be synchronized back to Zino.  The
+# "`acknowledge.setstate` option controls how. A value of "none" means
+# acknowledgments are not synchronized.  "waiting" or "working" will set
+# the corresponding Zino case state to either of those states.
+acknowledge.setstate = "none"
+
 [metadata]
 # Optional circuit metadata from telemator
 ports_url = "http://telemator.circuit.mapping.server/tm/curitz_circuitmapping.json"

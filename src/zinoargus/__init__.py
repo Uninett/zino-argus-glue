@@ -48,6 +48,7 @@ _logger = logging.getLogger("zinoargus")
 
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 HISTORY_EVENT_TYPE = "OTH"  # Other
+POLL_TIMEOUT = 30  # seconds
 
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
@@ -238,9 +239,10 @@ def close_argus_incidents_missing_from_zino(argus_incidents, zino_cases):
 def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
     """Continuously "poll" the Zino notification channel and update Argus accordingly"""
     while True:
-        update = _notifier.poll(timeout=1)
+        update = _notifier.poll(timeout=POLL_TIMEOUT)
         if not update:
             # No notification received (i.e. timeout occurred)
+            refresh_argus_incidents(argus_incidents, zino_cases)
             continue
         _logger.debug(
             "Update on Zino case id:%s type:%s info:%s",
@@ -274,6 +276,47 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
 
         if update.type == "history":
             synchronize_case_history(case, incident)
+
+
+def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
+    """Refreshes all the Argus incidents that we know of and care about.
+
+    This also triggers actions that modify Zino cases if indicated by changes to the
+    Argus incidents.
+    """
+    for case_id, old_incident in argus_incidents.items():
+        new_incident = _argus.get_incident(old_incident.pk)
+        argus_incidents[case_id] = new_incident
+
+        if new_incident.acked and not old_incident.acked:
+            update_case_acknowledged(case_id, argus_incidents, zino_cases)
+
+
+def update_case_acknowledged(
+    case_id: int, argus_incidents: IncidentMap, zino_cases: CaseMap
+):
+    """Updates a Zino case with the acknowledged status from Argus, if necessary."""
+    incident = argus_incidents[case_id]
+    msg = "Argus incident %s (zino case %s) was acknowledged"
+    desired_state = _config.sync.acknowledge.setstate
+    if desired_state == "none":
+        _logger.debug(msg + ", ignoring as configured", incident.pk, case_id)
+        return
+
+    case = zino_cases[case_id]
+    if case.state == desired_state:
+        return
+
+    _logger.info(msg + ", setting zino case to %r", incident.pk, case_id, desired_state)
+
+    acks = _argus.get_incident_acknowledgements(incident)
+    _logger.debug("Argus incident %s acks: %r", incident.pk, acks)
+    acks.sort(key=lambda ack: ack.event.timestamp, reverse=True)
+    last_ack = acks[0]
+
+    description = f"{last_ack.event.description} ({last_ack.event.actor})"
+    _zino.add_history(case_id, description)
+    _zino.set_state(case_id, desired_state)
 
 
 def synchronize_case_history(case: ritz.Case, incident: Incident):

@@ -19,6 +19,7 @@ import logging
 import signal
 import sys
 from datetime import datetime, timezone
+from operator import itemgetter
 from typing import Optional
 
 import requests
@@ -363,9 +364,8 @@ def update_state(
             "Zino case %s is closed and is being removed from argus", update.id
         )
         if incident.open:
-            close_argus_incident(incident, description="Zino case closed by user")
+            close_argus_incident(incident, case)
             # keep track of closed incidents in case of further updates
-            incident.open = False
             argus_incidents[update.id] = incident
         zino_cases.pop(update.id, None)
     else:
@@ -444,11 +444,36 @@ def generate_tags(zino_case):
             # GET UN
 
 
-def close_argus_incident(argus_incident, description=None) -> None:
-    # TODO: Add timestamp on resolve_incident
-    _logger.info("Deleting argus incident %s", argus_incident.pk)
+def close_argus_incident(
+    incident: Incident,
+    case: Optional[ritz.Case] = None,
+    description: Optional[str] = None,
+) -> None:
+    """Closes an argus incident.
 
-    _argus.resolve_incident(argus_incident, description=description)
+    The ending timestamp is taken from the last Zino case history entry,
+    if available, otherwise the current time is used.  If the description is empty,
+    the end event description will also be taken from the last history entry.
+    """
+    _logger.info("Closing argus incident %s", incident.pk)
+    timestamp = datetime.now(tz=timezone.utc)
+    if case:
+        if last_history := get_last_case_history_entry(case):
+            timestamp = last_history.get("date").replace(tzinfo=timezone.utc)
+            if not description:
+                description = last_history.get("header")
+
+    _argus.resolve_incident(incident, description=description, timestamp=timestamp)
+    incident.open = False
+
+
+def get_last_case_history_entry(case: ritz.Case) -> Optional[dict]:
+    """Returns the last history entry for a case"""
+    history = _zino.get_history(case.id)
+    if not history:
+        return None
+    history.sort(key=itemgetter("date"))
+    return history[-1]
 
 
 def create_argus_incident(zino_case: ritz.Case):

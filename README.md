@@ -10,6 +10,23 @@ This is still a work in progress and more information will be added here later.
 
 ## Installing zino-argus-glue
 
+### From Python Package Index (PyPI)
+
+```console
+$ pip install zino-argus-glue
+...
+$ zinoargus --help
+usage: zinoargus [-h] [-v] [-c CONFIG_FILE]
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose
+  -c CONFIG_FILE, --config-file CONFIG_FILE
+$
+```
+
+### From source (this repository)
+
 ```console
 $ pip install .
 ...

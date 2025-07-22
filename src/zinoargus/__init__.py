@@ -310,8 +310,9 @@ def update_case_acknowledged(
     _logger.info(msg + ", setting Zino case to %r", incident.pk, case_id, desired_state)
 
     acks = _argus.get_incident_acknowledgements(incident)
-    _logger.debug("Argus incident %s acks: %r", incident.pk, acks)
     acks.sort(key=lambda ack: ack.event.timestamp, reverse=True)
+    _logger.debug("Argus incident %s acks: %r", incident.pk, acks)
+
     last_ack = acks[0]
 
     description = f"{last_ack.event.description} ({last_ack.event.actor})"

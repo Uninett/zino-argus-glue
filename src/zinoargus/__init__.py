@@ -18,7 +18,7 @@ import argparse
 import logging
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from operator import itemgetter
 from typing import Optional
 
@@ -49,12 +49,14 @@ _logger = logging.getLogger("zinoargus")
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 HISTORY_EVENT_TYPE = "OTH"  # Other
 POLL_TIMEOUT = 30  # seconds
+INCIDENT_REFRESH_INTERVAL = timedelta(seconds=POLL_TIMEOUT)
 
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
 _notifier: Optional[ritz.notifier] = None
 _argus: Optional[Client] = None
 _circuit_metadata = dict()
+_last_incident_refresh = datetime.now()
 
 
 def main():
@@ -238,11 +240,15 @@ def close_argus_incidents_missing_from_zino(argus_incidents, zino_cases):
 
 def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
     """Continuously "poll" the Zino notification channel and update Argus accordingly"""
+    global _last_incident_refresh
     while True:
+        if datetime.now() > (_last_incident_refresh + INCIDENT_REFRESH_INTERVAL):
+            # Refreshes Argus incidents at least every INCIDENT_REFRESH_INTERVAL
+            refresh_argus_incidents(argus_incidents, zino_cases)
+            _last_incident_refresh = datetime.now()
+
         update = _notifier.poll(timeout=POLL_TIMEOUT)
         if not update:
-            # No notification received (i.e. timeout occurred)
-            refresh_argus_incidents(argus_incidents, zino_cases)
             continue
         _logger.debug(
             "Update on Zino case id:%s type:%s info:%s",

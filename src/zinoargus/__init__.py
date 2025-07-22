@@ -284,26 +284,23 @@ def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
     This also triggers actions that modify Zino cases if indicated by changes to the
     Argus incidents.
     """
+    do_update_on_ack = _config.sync.acknowledge.setstate != "none"
     for case_id, old_incident in argus_incidents.items():
         new_incident = _argus.get_incident(old_incident.pk)
         argus_incidents[case_id] = new_incident
 
-        if new_incident.acked and not old_incident.acked:
-            update_case_acknowledged(case_id, argus_incidents, zino_cases)
+        if do_update_on_ack and new_incident.acked and not old_incident.acked:
+            update_case_acknowledged(
+                incident=new_incident,
+                case=zino_cases[case_id],
+                desired_state=_config.sync.acknowledge.setstate,
+            )
 
 
-def update_case_acknowledged(
-    case_id: int, argus_incidents: IncidentMap, zino_cases: CaseMap
-):
+def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state: str):
     """Updates a Zino case with the acknowledged status from Argus, if necessary."""
-    incident = argus_incidents[case_id]
+    case_id = getattr(case, "_caseid")
     msg = "Argus incident %s (Zino case %s) was acknowledged"
-    desired_state = _config.sync.acknowledge.setstate
-    if desired_state == "none":
-        _logger.debug(msg + ", ignoring as configured", incident.pk, case_id)
-        return
-
-    case = zino_cases[case_id]
     if case.state == desired_state:
         return
 

@@ -18,7 +18,7 @@ import argparse
 import logging
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from operator import itemgetter
 from typing import Optional
 
@@ -48,12 +48,15 @@ _logger = logging.getLogger("zinoargus")
 
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 HISTORY_EVENT_TYPE = "OTH"  # Other
+POLL_TIMEOUT = 30  # seconds
+INCIDENT_REFRESH_INTERVAL = timedelta(seconds=POLL_TIMEOUT)
 
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
 _notifier: Optional[ritz.notifier] = None
 _argus: Optional[Client] = None
 _circuit_metadata = dict()
+_last_incident_refresh = datetime.now()
 
 
 def main():
@@ -83,16 +86,16 @@ def main():
 
     _argus = get_argus_client(_config.argus)
 
-    """Initiate connectionloop to zino"""
+    """Initiate connectionloop to Zino"""
     try:
         _zino, _notifier = connect_to_zino(_config.zino)
         start()
 
         # TODO: If the Zino connection errors out, this should try to reconnect rather than die
     except ritz.AuthenticationError:
-        _logger.critical("Unable to authenticate against zino, retrying in 30sec")
+        _logger.critical("Unable to authenticate against Zino, retrying in 30sec")
     except ritz.NotConnectedError:
-        _logger.critical("Lost connection with zino, retrying in 30sec")
+        _logger.critical("Lost connection with Zino, retrying in 30sec")
     except ConnectionRefusedError:
         _logger.critical(
             "Connection refused by Zino (%s:%s)", _config.zino.server, _config.zino.port
@@ -186,7 +189,7 @@ def get_all_my_argus_incidents() -> IncidentMap:
             )
             continue
         _logger.debug(
-            "Argus incident %s (zino case #%s) added to to internal data structures (%r)",
+            "Argus incident %s (Zino case #%s) added to to internal data structures (%r)",
             incident.pk,
             incident.source_incident_id,
             incident.description,
@@ -226,21 +229,26 @@ def create_argus_incidents_from_new_zino_cases(argus_incidents, zino_cases):
 def close_argus_incidents_missing_from_zino(argus_incidents, zino_cases):
     for case_id in set(argus_incidents) - set(zino_cases):
         _logger.info(
-            "Zino case %s is not cached from zino, and ready to be closed in argus",
+            "Zino case %s is not cached from Zino, and ready to be closed in Argus",
             case_id,
         )
         close_argus_incident(
             argus_incidents[case_id],
-            description="This case did not exist in zino when glue service was started",
+            description="This case did not exist in Zino when glue service was started",
         )
 
 
 def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
     """Continuously "poll" the Zino notification channel and update Argus accordingly"""
+    global _last_incident_refresh
     while True:
-        update = _notifier.poll(timeout=1)
+        if datetime.now() > (_last_incident_refresh + INCIDENT_REFRESH_INTERVAL):
+            # Refreshes Argus incidents at least every INCIDENT_REFRESH_INTERVAL
+            refresh_argus_incidents(argus_incidents, zino_cases)
+            _last_incident_refresh = datetime.now()
+
+        update = _notifier.poll(timeout=POLL_TIMEOUT)
         if not update:
-            # No notification received (i.e. timeout occurred)
             continue
         _logger.debug(
             "Update on Zino case id:%s type:%s info:%s",
@@ -274,6 +282,45 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
 
         if update.type == "history":
             synchronize_case_history(case, incident)
+
+
+def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
+    """Refreshes all the Argus incidents that we know of and care about.
+
+    This also triggers actions that modify Zino cases if indicated by changes to the
+    Argus incidents.
+    """
+    do_update_on_ack = _config.sync.acknowledge.setstate != "none"
+    for case_id, old_incident in argus_incidents.items():
+        new_incident = _argus.get_incident(old_incident.pk)
+        argus_incidents[case_id] = new_incident
+
+        if do_update_on_ack and new_incident.acked and not old_incident.acked:
+            update_case_acknowledged(
+                incident=new_incident,
+                case=zino_cases[case_id],
+                desired_state=_config.sync.acknowledge.setstate,
+            )
+
+
+def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state: str):
+    """Updates a Zino case with the acknowledged status from Argus, if necessary."""
+    case_id = getattr(case, "_caseid")
+    msg = "Argus incident %s (Zino case %s) was acknowledged"
+    if case.state == desired_state:
+        return
+
+    _logger.info(msg + ", setting Zino case to %r", incident.pk, case_id, desired_state)
+
+    acks = _argus.get_incident_acknowledgements(incident)
+    acks.sort(key=lambda ack: ack.event.timestamp, reverse=True)
+    _logger.debug("Argus incident %s acks: %r", incident.pk, acks)
+
+    last_ack = acks[0]
+
+    description = f"{last_ack.event.description} ({last_ack.event.actor})"
+    _zino.add_history(case_id, description)
+    _zino.set_state(case_id, desired_state)
 
 
 def synchronize_case_history(case: ritz.Case, incident: Incident):
@@ -361,7 +408,7 @@ def update_state(
     if new_state == "closed":
         # Closing case
         _logger.debug(
-            "Zino case %s is closed and is being removed from argus", update.id
+            "Zino case %s is closed and is being removed from Argus", update.id
         )
         if incident.open:
             close_argus_incident(incident, case)
@@ -449,13 +496,13 @@ def close_argus_incident(
     case: Optional[ritz.Case] = None,
     description: Optional[str] = None,
 ) -> None:
-    """Closes an argus incident.
+    """Closes an Argus incident.
 
     The ending timestamp is taken from the last Zino case history entry,
     if available, otherwise the current time is used.  If the description is empty,
     the end event description will also be taken from the last history entry.
     """
-    _logger.info("Closing argus incident %s", incident.pk)
+    _logger.info("Closing Argus incident %s", incident.pk)
     timestamp = datetime.now(tz=timezone.utc)
     if case:
         if last_history := get_last_case_history_entry(case):
@@ -479,10 +526,10 @@ def get_last_case_history_entry(case: ritz.Case) -> Optional[dict]:
 def create_argus_incident(zino_case: ritz.Case):
     description = describe_zino_case(zino_case)
     if not description:
-        _logger.info("Ignoring zino case %s", zino_case.id)
+        _logger.info("Ignoring Zino case %s", zino_case.id)
         return None
 
-    _logger.info("Creating argus incident for zino case %s", zino_case.id)
+    _logger.info("Creating Argus incident for Zino case %s", zino_case.id)
     # ritz/zinolib datetime objects are timezone-naive, given in UTC
     timestamp_opened = zino_case.opened.replace(tzinfo=timezone.utc)
     incident = Incident(

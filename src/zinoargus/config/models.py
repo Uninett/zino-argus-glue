@@ -16,7 +16,7 @@
 
 """Zino configuration models"""
 
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, IPvAnyAddress
 
@@ -52,6 +52,24 @@ class MetadataConfiguration(BaseModel):
     ports_url: Optional[AnyHttpUrl] = None
 
 
+class AcknowledgeSyncConfiguration(BaseModel):
+    """Class for modeling acknowledgment synchronization configuration"""
+
+    # throw ValidationError on extra keys
+    model_config = ConfigDict(extra="forbid")
+
+    setstate: Literal["none", "working", "waiting"] = "none"
+
+
+class SyncConfiguration(BaseModel):
+    """Class for modeling synchronization behavior configuration"""
+
+    # throw ValidationError on extra keys
+    model_config = ConfigDict(extra="forbid")
+
+    acknowledge: Optional[AcknowledgeSyncConfiguration] = AcknowledgeSyncConfiguration()
+
+
 class Configuration(BaseModel):
     """Class for modeling the Zino-Argus glue service configuration"""
 
@@ -60,4 +78,5 @@ class Configuration(BaseModel):
 
     argus: ArgusConfiguration
     zino: ZinoConfiguration
+    sync: Optional[SyncConfiguration] = SyncConfiguration()
     metadata: Optional[MetadataConfiguration] = MetadataConfiguration()

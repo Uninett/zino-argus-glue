@@ -61,6 +61,15 @@ class AcknowledgeSyncConfiguration(BaseModel):
     setstate: Literal["none", "working", "waiting"] = "none"
 
 
+class TicketSyncConfiguration(BaseModel):
+    """Class for modeling ticket synchronization configuration"""
+
+    # throw ValidationError on extra keys
+    model_config = ConfigDict(extra="forbid")
+
+    enable: bool = False
+
+
 class SyncConfiguration(BaseModel):
     """Class for modeling synchronization behavior configuration"""
 
@@ -68,6 +77,7 @@ class SyncConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     acknowledge: Optional[AcknowledgeSyncConfiguration] = AcknowledgeSyncConfiguration()
+    ticket: Optional[TicketSyncConfiguration] = TicketSyncConfiguration()
 
 
 class Configuration(BaseModel):

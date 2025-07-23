@@ -19,6 +19,10 @@ secret = "1234123412341234123412341324123413241"
 # the corresponding Zino case state to either of those states.
 acknowledge.setstate = "none"
 
+# Argus incident ticket URLs can be synchronized back to Zino as history
+# entries.  Set this to `true` to do so:
+ticket.enable = false
+
 [metadata]
 # Optional circuit metadata from telemator
 ports_url = "http://telemator.circuit.mapping.server/tm/curitz_circuitmapping.json"

@@ -33,6 +33,7 @@ dynamic = ["version"]
 
 [project.urls]
 "Homepage" = "https://github.com/Uninett/zino-argus-glue"
+"Changelog" = "https://github.com/Uninett/zino-argus-glue/blob/master/CHANGELOG.md"
 
 [project.scripts]
 zinoargus = "zinoargus:main"

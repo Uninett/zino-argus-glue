@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "zino-argus-glue"
 description = "Argus glue service for Zino"
-authors = [{name="Sikt - Kunnskapssektorens Tjenesteleverandør", email="kontakt@sikt.no"}]
+authors = [{name="Sikt - Norwegian Agency for Shared Services in Education and Research", email="kontakt@sikt.no"}]
 maintainers = [{name="Morten Brekkevold", email="morten.brekkevold@sikt.no"}]
 readme = "README.md"
 requires-python = ">=3.9"

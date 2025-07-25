@@ -9,12 +9,11 @@ authors = [{name="Sikt - Kunnskapssektorens Tjenesteleverandør", email="kontakt
 maintainers = [{name="Morten Brekkevold", email="morten.brekkevold@sikt.no"}]
 readme = "README.md"
 requires-python = ">=3.9"
-license = {file = "LICENSE"}
+license = "Apache-2.0"
 classifiers = [
     "Intended Audience :: Information Technology",
     "Intended Audience :: System Administrators",
-    "Development Status :: 3 - Alpha",
-    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",

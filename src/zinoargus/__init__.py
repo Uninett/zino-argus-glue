@@ -354,6 +354,10 @@ def is_string_in_case_history(case_id: int, string: str) -> bool:
 
 def find_who_added_incident_ticket(incident: Incident, ticket_url: str) -> str:
     """Traverses the incident events to find the user who added the ticket URL."""
+    # This works under the assumption that events are returned in descending order by
+    # timestamp (they seem to be by Argus 2.0, at least), so the first event we
+    # find that contains the ticket URL should be the event that represents the change
+    # to the current value.
     for event in _argus.get_incident_events(incident):
         if (
             event.type == INCIDENT_ATTRIBUTE_CHANGE_TYPE

@@ -48,6 +48,7 @@ _logger = logging.getLogger("zinoargus")
 
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 HISTORY_EVENT_TYPE = "OTH"  # Other
+INCIDENT_ATTRIBUTE_CHANGE_TYPE = "CHI"
 POLL_TIMEOUT = 30  # seconds
 INCIDENT_REFRESH_INTERVAL = timedelta(seconds=POLL_TIMEOUT)
 
@@ -302,6 +303,9 @@ def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
                 desired_state=_config.sync.acknowledge.setstate,
             )
 
+        if _config.sync.ticket.enable:
+            update_case_ticket(incident=new_incident, case_id=case_id)
+
 
 def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state: str):
     """Updates a Zino case with the acknowledged status from Argus, if necessary."""
@@ -321,6 +325,46 @@ def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state:
     description = f"{last_ack.event.description} ({last_ack.event.actor})"
     _zino.add_history(case_id, description)
     _zino.set_state(case_id, desired_state)
+
+
+def update_case_ticket(incident: Incident, case_id: int):
+    """Updates a Zino case history with a new ticket URL from Argus, if it isn't there
+    already.
+    """
+    if not incident.ticket_url:
+        return
+    if is_string_in_case_history(case_id, incident.ticket_url):
+        return
+    user = find_who_added_incident_ticket(incident, incident.ticket_url)
+    _logger.info(
+        "New ticket URL %s found on Argus incident %s, adding to Zino case %s",
+        incident.ticket_url,
+        incident.pk,
+        case_id,
+    )
+    message = f"Ticket {incident.ticket_url} added by Argus user {user}"
+    _zino.add_history(case_id, message)
+
+
+def is_string_in_case_history(case_id: int, string: str) -> bool:
+    """Returns True if a substring is present in the case history"""
+    history = _zino.get_history(case_id)
+    return any(any(string in line for line in entry["log"]) for entry in history)
+
+
+def find_who_added_incident_ticket(incident: Incident, ticket_url: str) -> str:
+    """Traverses the incident events to find the user who added the ticket URL."""
+    # This works under the assumption that events are returned in descending order by
+    # timestamp (they seem to be by Argus 2.0, at least), so the first event we
+    # find that contains the ticket URL should be the event that represents the change
+    # to the current value.
+    for event in _argus.get_incident_events(incident):
+        if (
+            event.type == INCIDENT_ATTRIBUTE_CHANGE_TYPE
+            and ticket_url in event.description
+        ):
+            return event.actor
+    return "(unknown user)"
 
 
 def synchronize_case_history(case: ritz.Case, incident: Incident):

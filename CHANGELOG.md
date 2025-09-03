@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Handle timezones correctly when passing timestamps from Zino to Argus.
+- Properly follow up on state changes in all Argus incidents created by this
+  glue service.
 
 ## [0.2.0] - 2025-07-25
 

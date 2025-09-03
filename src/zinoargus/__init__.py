@@ -293,6 +293,7 @@ def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
     Argus incidents.
     """
     do_update_on_ack = _config.sync.acknowledge.setstate != "none"
+    _logger.info("Refreshing %s Argus incidents", len(argus_incidents))
     for case_id, old_incident in argus_incidents.items():
         new_incident = _argus.get_incident(old_incident.pk)
         argus_incidents[case_id] = new_incident

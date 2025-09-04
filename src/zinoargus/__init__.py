@@ -51,6 +51,7 @@ HISTORY_EVENT_TYPE = "OTH"  # Other
 INCIDENT_ATTRIBUTE_CHANGE_TYPE = "CHI"
 POLL_TIMEOUT = 30  # seconds
 INCIDENT_REFRESH_INTERVAL = timedelta(seconds=POLL_TIMEOUT)
+MY_TZINFO = datetime.now().astimezone().tzinfo
 
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
@@ -411,10 +412,10 @@ def make_event_from_history_entry(entry: dict) -> Event:
     description = entry.get("header")
     if entry.get("log"):
         description += "\n" + "\n".join(entry.get("log"))
-    # datetime objects from ritz/zinolib are timezone-naive, even if the timestamps
-    # retrieved from Zino are specifically UTC.  We need to assign a UTC timezone to
-    # these datetime objects in order to ensure correct timestamps in Argus
-    timestamp = entry.get("date").replace(tzinfo=timezone.utc)
+    # datetime objects from ritz/zinolib are converted from Zino's UTC to the local
+    # timezone, but the objects are timezone-naive.  We need to assign proper tzinfo
+    # to the timestamp before sending to Argus:
+    timestamp = entry.get("date").replace(tzinfo=MY_TZINFO)
     return Event(
         timestamp=timestamp,
         description=description,
@@ -550,7 +551,7 @@ def close_argus_incident(
     timestamp = datetime.now(tz=timezone.utc)
     if case:
         if last_history := get_last_case_history_entry(case):
-            timestamp = last_history.get("date").replace(tzinfo=timezone.utc)
+            timestamp = last_history.get("date").replace(tzinfo=MY_TZINFO)
             if not description:
                 description = last_history.get("header")
 
@@ -574,8 +575,8 @@ def create_argus_incident(zino_case: ritz.Case):
         return None
 
     _logger.info("Creating Argus incident for Zino case %s", zino_case.id)
-    # ritz/zinolib datetime objects are timezone-naive, given in UTC
-    timestamp_opened = zino_case.opened.replace(tzinfo=timezone.utc)
+    # ritz/zinolib datetime objects are timezone-naive, given in local time
+    timestamp_opened = zino_case.opened.replace(tzinfo=MY_TZINFO)
     incident = Incident(
         start_time=timestamp_opened,
         end_time=datetime.max,

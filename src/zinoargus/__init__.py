@@ -222,13 +222,18 @@ def get_all_interesting_zino_cases() -> CaseMap:
     return zino_cases
 
 
-def create_argus_incidents_from_new_zino_cases(argus_incidents, zino_cases):
+def create_argus_incidents_from_new_zino_cases(
+    argus_incidents: IncidentMap, zino_cases: CaseMap
+):
     for case_id in set(zino_cases) - set(argus_incidents):
         _logger.info("Zino case %s is not in Argus, creating", case_id)
-        create_argus_incident(zino_cases[case_id])
+        new_incident = create_argus_incident(zino_cases[case_id])
+        argus_incidents[case_id] = new_incident
 
 
-def close_argus_incidents_missing_from_zino(argus_incidents, zino_cases):
+def close_argus_incidents_missing_from_zino(
+    argus_incidents: IncidentMap, zino_cases: CaseMap
+):
     for case_id in set(argus_incidents) - set(zino_cases):
         _logger.info(
             "Zino case %s is not cached from Zino, and ready to be closed in Argus",
@@ -293,6 +298,7 @@ def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
     Argus incidents.
     """
     do_update_on_ack = _config.sync.acknowledge.setstate != "none"
+    _logger.info("Refreshing %s Argus incidents", len(argus_incidents))
     for case_id, old_incident in argus_incidents.items():
         new_incident = _argus.get_incident(old_incident.pk)
         argus_incidents[case_id] = new_incident
@@ -438,7 +444,9 @@ def get_or_make_argus_incident_for_zino_case(
         argus_incidents[case_id] = incident
         return incident
 
-    return create_argus_incident(case)
+    new_incident = create_argus_incident(case)
+    argus_incidents[case_id] = new_incident
+    return new_incident
 
 
 def update_state(

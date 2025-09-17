@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added config option `timeout` to configure the Argus API timeout
 
+### Fixed
+- Close a Zino event if the corresponding Argus incident was closed.
+
 ## [0.2.1] - 2025-09-04
 
 ### Fixed

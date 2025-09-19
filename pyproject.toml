@@ -57,37 +57,15 @@ exclude = ["tests*"]
 [tool.setuptools_scm]
 write_to = "src/zinoargus/version.py"
 
-[tool.black]
-line-length = 88
-# Exclude files even when passed directly as argument (for MegaLinter)
-force-exclude = '''
-(
-  /(
-      \.eggs         # exclude a few common directories in the
-    | \.git          # root of the project
-    | \.hg
-    | \.mypy_cache
-    | \.nox
-    | \.tox
-    | \.venv
-    | \.ve
-    | _build
-    | buck-out
-    | build
-    | dist
-    | docs
-  )
-)
-'''
-
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-exclude = [
+extend-exclude = [
     "docs"
 ]
-# Exclude files even when passed directly as argument (for MegaLinter)
-force-exclude = true
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+fixable = ["I"]
 
 [tool.coverage.report]
 # Regexes for lines to exclude from consideration

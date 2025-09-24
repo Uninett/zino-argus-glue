@@ -396,7 +396,7 @@ def update_case_closed(incident: Incident, case: ritz.Case):
     for event in events:
         if event.type == "CLO":
             closing_event = event
-            continue
+            break
 
     description = f"{closing_event.description} ({closing_event.actor})"
     _zino.add_history(case_id, description)

@@ -394,7 +394,7 @@ def update_case_closed(incident: Incident, case: ritz.Case):
     _logger.debug("Argus incident %s events: %r", incident.pk, events)
 
     for event in events:
-        if event.type in ["END", "CLO"]:
+        if event.type == "CLO":
             closing_event = event
             continue
 

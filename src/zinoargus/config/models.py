@@ -18,7 +18,7 @@
 
 from typing import Literal, Optional, Union
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, IPvAnyAddress
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, IPvAnyAddress, PositiveFloat
 
 Host = Union[IPvAnyAddress, str]
 
@@ -31,6 +31,7 @@ class ArgusConfiguration(BaseModel):
 
     url: AnyHttpUrl
     token: str
+    timeout: PositiveFloat = 2.0
 
 
 class ZinoConfiguration(BaseModel):

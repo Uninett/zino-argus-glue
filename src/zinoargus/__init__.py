@@ -226,9 +226,13 @@ def create_argus_incidents_from_new_zino_cases(
     argus_incidents: IncidentMap, zino_cases: CaseMap
 ):
     for case_id in set(zino_cases) - set(argus_incidents):
-        _logger.info("Zino case %s is not in Argus, creating", case_id)
-        new_incident = create_argus_incident(zino_cases[case_id])
-        argus_incidents[case_id] = new_incident
+        incident = get_or_make_argus_incident_for_zino_case(
+            case_id, zino_cases[case_id], argus_incidents
+        )
+        if incident.stateful and not incident.open:
+            # Argus incident was closed while zino-argus-glue was down, closing Zino
+            # case
+            update_case_closed(incident, zino_cases[case_id])
 
 
 def close_argus_incidents_missing_from_zino(

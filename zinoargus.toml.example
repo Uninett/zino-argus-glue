@@ -4,6 +4,10 @@
 url = "https://path.to.api/api/v2/"
 token = "1234543654778675647436245234"
 
+# Timeout for Argus API requests
+# default 2.0 seconds
+timeout = 2.0
+
 [zino]
 # The configuration used to establish a zino server session
 server = "zino.server"

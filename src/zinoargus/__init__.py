@@ -141,6 +141,7 @@ def get_argus_client(configuration: ArgusConfiguration) -> Client:
     return Client(
         api_root_url=str(configuration.url),
         token=configuration.token,
+        timeout=configuration.timeout,
     )
 
 

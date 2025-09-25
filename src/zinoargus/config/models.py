@@ -26,6 +26,7 @@ Host = Union[IPvAnyAddress, str]
 class ArgusConfiguration(BaseModel):
     """Argus API connection configuration"""
 
+    # throw ValidationError on extra keys
     model_config = ConfigDict(extra="forbid")
 
     url: AnyHttpUrl

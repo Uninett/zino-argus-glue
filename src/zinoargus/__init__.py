@@ -227,9 +227,13 @@ def create_argus_incidents_from_new_zino_cases(
     argus_incidents: IncidentMap, zino_cases: CaseMap
 ):
     for case_id in set(zino_cases) - set(argus_incidents):
-        _logger.info("Zino case %s is not in Argus, creating", case_id)
-        new_incident = create_argus_incident(zino_cases[case_id])
-        argus_incidents[case_id] = new_incident
+        incident = get_or_make_argus_incident_for_zino_case(
+            case_id, zino_cases[case_id], argus_incidents
+        )
+        if incident.stateful and not incident.open:
+            # Argus incident was closed while zino-argus-glue was down, closing Zino
+            # case
+            update_case_closed(incident, zino_cases[case_id])
 
 
 def close_argus_incidents_missing_from_zino(
@@ -314,6 +318,9 @@ def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
         if _config.sync.ticket.enable:
             update_case_ticket(incident=new_incident, case_id=case_id)
 
+        if not new_incident.open and old_incident.open:
+            update_case_closed(incident=new_incident, case=zino_cases[case_id])
+
 
 def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state: str):
     """Updates a Zino case with the acknowledged status from Argus, if necessary."""
@@ -373,6 +380,32 @@ def find_who_added_incident_ticket(incident: Incident, ticket_url: str) -> str:
         ):
             return event.actor
     return "(unknown user)"
+
+
+def update_case_closed(incident: Incident, case: ritz.Case):
+    """Closes a Zino case if the Argus incident is closed."""
+    case_id = getattr(case, "_caseid")
+    if incident.open:
+        return
+
+    _logger.info(
+        "Closing Zino case %s, because Argus incident %s was closed",
+        case_id,
+        incident.pk,
+    )
+
+    events = _argus.get_incident_events(incident)
+    events.sort(key=lambda event: event.timestamp, reverse=True)
+    _logger.debug("Argus incident %s events: %r", incident.pk, events)
+
+    for event in events:
+        if event.type == "CLO":
+            closing_event = event
+            break
+
+    description = f"{closing_event.description} ({closing_event.actor})"
+    _zino.add_history(case_id, description)
+    _zino.set_state(case_id, "closed")
 
 
 def synchronize_case_history(case: ritz.Case, incident: Incident):

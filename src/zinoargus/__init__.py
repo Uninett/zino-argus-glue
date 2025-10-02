@@ -424,6 +424,11 @@ def synchronize_case_history(case: ritz.Case, incident: Incident):
     nothing interesting other than a "state change from embryonic to opened", so it
     conveys no more information than the initial "incident start" event and is easily
     omitted (this algorithm will see the STA and OTH events as duplicates).
+
+    Another case is the history entry that is added when we close a Zino case when the
+    Argus incident is closed. Since we already have it recorded as an Argus event, we
+    do not need to sync that back. We can identify these by comparing the author of the
+    log entry with the user we have saved as our Zino username.
     """
     history = _zino.get_history(case.id)
     existing_events = _argus.get_incident_events(incident)
@@ -436,7 +441,10 @@ def synchronize_case_history(case: ritz.Case, incident: Incident):
     new_events = []
     for entry in history:
         event = make_event_from_history_entry(entry)
-        if event.timestamp in my_events_by_timestamp:
+        if (
+            event.timestamp in my_events_by_timestamp
+            or entry["user"] == _config.zino.user
+        ):
             # Event likely already exists in Argus
             continue
         new_events.append(event)

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Close a Zino event if the corresponding Argus incident was closed.
+- Avoid syncing back Zino history entries added by the glue service.
 
 ## [0.2.1] - 2025-09-04
 

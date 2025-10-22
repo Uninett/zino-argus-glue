@@ -37,6 +37,24 @@ dynamic = ["version"]
 [project.scripts]
 zinoargus = "zinoargus:main"
 
+[dependency-groups]
+test = [
+    "coverage",
+    "pytest>7",
+    "pytest-cov",
+    "tox",
+]
+maintenance = [
+    "build",
+    "twine",
+]
+dev = [
+    "ruff",
+    "pre-commit",
+    {include-group = "maintenance"},
+    {include-group = "test"},
+]
+
 [tool.setuptools]
 include-package-data = true
 zip-safe = false

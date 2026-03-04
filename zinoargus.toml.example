@@ -30,3 +30,14 @@ ticket.enable = false
 [metadata]
 # Optional circuit metadata from telemator
 ports_url = "http://telemator.circuit.mapping.server/tm/curitz_circuitmapping.json"
+
+# Optional failover configuration for primary/secondary deployments.
+# When this section is absent, the daemon runs in primary mode (always
+# active).  When configured, the daemon starts in standby and monitors
+# the primary Zino via SNMP, taking over if it becomes unreachable.
+#[failover]
+#primary_server = "10.0.0.1"
+#primary_snmp_port = 8000
+#snmp_community = "public"
+#ping_timeout = 5
+#threshold = 10

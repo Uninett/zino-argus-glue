@@ -82,6 +82,18 @@ class SyncConfiguration(BaseModel):
     ticket: Optional[TicketSyncConfiguration] = TicketSyncConfiguration()
 
 
+class FailoverConfiguration(BaseModel):
+    """Configuration for primary/secondary failover mode"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    primary_server: Host
+    primary_snmp_port: int = 8000
+    snmp_community: str = "public"
+    ping_timeout: int = 5
+    threshold: int = 10
+
+
 class Configuration(BaseModel):
     """Class for modeling the Zino-Argus glue service configuration"""
 
@@ -92,3 +104,4 @@ class Configuration(BaseModel):
     zino: ZinoConfiguration
     sync: Optional[SyncConfiguration] = SyncConfiguration()
     metadata: Optional[MetadataConfiguration] = MetadataConfiguration()
+    failover: Optional[FailoverConfiguration] = None

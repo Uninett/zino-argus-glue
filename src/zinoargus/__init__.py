@@ -50,8 +50,9 @@ _logger = logging.getLogger("zinoargus")
 FORMATTER = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 HISTORY_EVENT_TYPE = "OTH"  # Other
 INCIDENT_ATTRIBUTE_CHANGE_TYPE = "CHI"
-POLL_TIMEOUT = 30  # seconds
-INCIDENT_REFRESH_INTERVAL = timedelta(seconds=POLL_TIMEOUT)
+POLL_TIMEOUT = 5  # seconds
+PING_INTERVAL = timedelta(seconds=5)
+INCIDENT_REFRESH_INTERVAL = timedelta(seconds=30)
 MY_TZINFO = datetime.now().astimezone().tzinfo
 
 _config: Optional[Configuration] = None
@@ -60,6 +61,7 @@ _notifier: Optional[ritz.notifier] = None
 _argus: Optional[Client] = None
 _circuit_metadata = dict()
 _last_incident_refresh = datetime.now()
+_last_ping = datetime.now()
 
 
 def main():
@@ -264,8 +266,11 @@ def synchronize_continuously(
 ):
     """Continuously "poll" the Zino notification channel and update Argus accordingly"""
     global _last_incident_refresh
+    global _last_ping
     while True:
-        instance.ping()
+        if datetime.now() > (_last_ping + PING_INTERVAL):
+            instance.ping()
+            _last_ping = datetime.now()
 
         if instance.is_active:
             if datetime.now() > (_last_incident_refresh + INCIDENT_REFRESH_INTERVAL):

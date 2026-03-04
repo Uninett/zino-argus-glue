@@ -38,6 +38,7 @@ from zinoargus.config.models import (
     Configuration,
     ZinoConfiguration,
 )
+from zinoargus.failover import InstanceState
 
 # A map of Zino case numbers to Zino case objects
 CaseMap = dict[int, ritz.Case]
@@ -153,8 +154,16 @@ def start():
     _logger.info("starting")
     collect_circuit_metadata()
 
-    argus_incidents, zino_cases = synchronize_all_cases()
-    synchronize_continuously(argus_incidents, zino_cases)
+    instance = InstanceState(_config.failover)
+
+    if instance.is_active:
+        argus_incidents, zino_cases = synchronize_all_cases()
+    else:
+        _logger.info("Starting in STANDBY mode, skipping initial Argus sync")
+        argus_incidents = {}
+        zino_cases = get_all_interesting_zino_cases()
+
+    synchronize_continuously(argus_incidents, zino_cases, instance)
 
 
 def synchronize_all_cases() -> tuple[IncidentMap, CaseMap]:
@@ -250,14 +259,18 @@ def close_argus_incidents_missing_from_zino(
         )
 
 
-def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
+def synchronize_continuously(
+    argus_incidents: IncidentMap, zino_cases: CaseMap, instance: InstanceState
+):
     """Continuously "poll" the Zino notification channel and update Argus accordingly"""
     global _last_incident_refresh
     while True:
-        if datetime.now() > (_last_incident_refresh + INCIDENT_REFRESH_INTERVAL):
-            # Refreshes Argus incidents at least every INCIDENT_REFRESH_INTERVAL
-            refresh_argus_incidents(argus_incidents, zino_cases)
-            _last_incident_refresh = datetime.now()
+        instance.ping()
+
+        if instance.is_active:
+            if datetime.now() > (_last_incident_refresh + INCIDENT_REFRESH_INTERVAL):
+                refresh_argus_incidents(argus_incidents, zino_cases)
+                _last_incident_refresh = datetime.now()
 
         update = _notifier.poll(timeout=POLL_TIMEOUT)
         if not update:
@@ -283,6 +296,9 @@ def synchronize_continuously(argus_incidents: IncidentMap, zino_cases: CaseMap):
 
         if not is_case_interesting(case):
             # Ignore this update, as it's not interesting to us
+            continue
+
+        if not instance.is_active:
             continue
 
         incident = get_or_make_argus_incident_for_zino_case(

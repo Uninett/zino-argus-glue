@@ -7,11 +7,9 @@ import time
 
 import pytest
 
-
-def pytest_configure(config):
-    # This forces an argus version that works (as of this writing, the latest
-    # docker images are broken)
-    config.option.argus_version = "1.30.0"
+# def pytest_configure(config):
+#     # This forces a specific Argus version, if needed
+#     config.option.argus_version = "2.7.0"
 
 
 @pytest.fixture

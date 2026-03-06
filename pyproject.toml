@@ -41,8 +41,10 @@ zinoargus = "zinoargus:main"
 test = [
     "coverage",
     "pytest>7",
+    "pytest-argus-server>=0.3.0",
     "pytest-cov",
     "tox",
+    "zino>=2.0.0",
 ]
 maintenance = [
     "build",

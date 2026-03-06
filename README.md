@@ -50,9 +50,41 @@ or you can specify an alternate path to a configuration file using the `-c`
 command line option.  See [zinoargus.toml.example](./zinoargus.toml.example)
 for an example configuration file.
 
+## Primary/secondary failover
+
+`zino-argus-glue` can run as a secondary instance that monitors a primary Zino
+server and only takes over Argus synchronization only when the primary becomes
+unreachable.  The secondary polls the primary's SNMP agent for its uptime at
+regular intervals; after a configurable number of consecutive failures it
+switches from `STANDBY` to `ACTIVE` and begins syncing.  When the primary
+recovers (the same number of consecutive successes), it switches back to
+STANDBY.
+
+To enable failover, add a `[failover]` section to your configuration file:
+
+```toml
+[failover]
+primary_server = "10.0.0.1"
+primary_snmp_port = 8000
+snmp_community = "public"
+ping_timeout = 5
+threshold = 10
+```
+
+- `primary_server` — hostname or IP of the primary Zino's SNMP agent
+  (required)
+- `primary_snmp_port` — UDP port of the SNMP agent (default `8000`)
+- `snmp_community` — SNMP community string (default `"public"`)
+- `ping_timeout` — timeout in seconds for each SNMP query (default `5`)
+- `threshold` — number of consecutive failures before activating, and
+  consecutive successes before standing down (default `10`)
+
+When the `[failover]` section is omitted, the daemon runs in standalone
+(always-active) mode, which is the default behavior.
+
 ## Copying
 
-Copyright 2025 Sikt (The Norwegian Agency for Shared Services in Education and
+Copyright 2025-2026 Sikt (The Norwegian Agency for Shared Services in Education and
 Research)
 
 Licensed under the Apache License, Version 2.0; See [LICENSE](./LICENSE) for a

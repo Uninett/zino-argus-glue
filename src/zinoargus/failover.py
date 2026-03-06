@@ -48,16 +48,28 @@ class InstanceState:
             return
 
         try:
-            get_zino_uptime(
+            uptime = get_zino_uptime(
                 host=str(self._config.primary_server),
                 port=self._config.primary_snmp_port,
                 community=self._config.snmp_community,
                 timeout=self._config.ping_timeout,
             )
-        except ZpingError:
+        except ZpingError as exc:
             self._on_failure()
+            _logger.warning(
+                "Zino primary ping failed for %s: %s (%s consecutive)",
+                self._config.primary_server,
+                exc,
+                self._consecutive_failures,
+            )
         else:
             self._on_success()
+            _logger.debug(
+                "Zino primary ping OK for %s, uptime: %s (%s consecutive)",
+                self._config.primary_server,
+                uptime,
+                self._consecutive_successes,
+            )
 
     def _on_success(self) -> None:
         self._consecutive_successes += 1

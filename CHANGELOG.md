@@ -11,6 +11,18 @@ the upcoming release can be found in
 
 <!-- towncrier release notes start -->
 
+## [0.4.0] - 2026-04-28
+
+### Added
+
+- Added failover mechanism for primary/secondary Zino deployments. A secondary instance monitors the primary via SNMP and only syncs to Argus when the primary is unreachable. ([#30](https://github.com/Uninett/zino/issues/30))
+
+### Changed
+
+- Move dev and test dependencies from requirements files into `[dependency-groups]` in `pyproject.toml`
+- Test on Argus 2.x by default
+
+
 ## [0.3.0] - 2025-10-21
 
 ### Added

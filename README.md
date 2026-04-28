@@ -60,6 +60,12 @@ switches from `STANDBY` to `ACTIVE` and begins syncing.  When the primary
 recovers (the same number of consecutive successes), it switches back to
 STANDBY.
 
+A complete failover deployment therefore consists of two independent Zino
+servers (each with its own state) and two `zino-argus-glue` instances.  Each
+glue instance connects to its own local Zino, and the secondary glue
+additionally pings the *primary* Zino's SNMP agent to decide whether to be
+active.
+
 To enable failover, add a `[failover]` section to your configuration file:
 
 ```toml
@@ -81,6 +87,22 @@ threshold = 10
 
 When the `[failover]` section is omitted, the daemon runs in standalone
 (always-active) mode, which is the default behavior.
+
+### Verifying failover manually
+
+To exercise the failover logic end-to-end:
+
+1. Start the secondary `zino-argus-glue` with a `[failover]` section pointing
+   at the primary Zino's SNMP agent.  It should log that it is starting in
+   `STANDBY` mode.
+2. Stop the primary Zino process.  After `threshold` consecutive ping failures
+   the secondary should log a transition to `ACTIVE` and begin syncing its
+   own Zino's cases to Argus.
+3. Restart the primary Zino.  After `threshold` consecutive successful pings
+   the secondary should log a transition back to `STANDBY` and stop syncing.
+
+A low `threshold` (e.g. `3`) is convenient for testing; production deployments
+will typically want a higher value to avoid flapping.
 
 ## Copying
 

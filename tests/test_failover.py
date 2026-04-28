@@ -59,6 +59,7 @@ class TestInstanceStateStandbyToActive:
             state.ping()
 
         assert not state.is_active
+        assert state.mode is Mode.STANDBY
 
     @patch("zinoargus.failover.get_zino_uptime")
     def test_when_success_interrupts_failures_it_should_reset_counter(
@@ -80,6 +81,7 @@ class TestInstanceStateStandbyToActive:
         state.ping()  # fail 2 again
 
         assert not state.is_active
+        assert state.mode is Mode.STANDBY
 
 
 class TestInstanceStateActiveToStandby:
@@ -156,3 +158,29 @@ class TestInstanceStateCounterResetOnTransition:
         state.ping()
         state.ping()
         assert state.is_active  # only 2 successes, counter was reset
+
+    @patch("zinoargus.failover.get_zino_uptime")
+    def test_when_transitioning_to_standby_counters_should_reset(self, mock_uptime):
+        mock_uptime.side_effect = ZpingError("unreachable")
+        config = _make_config(threshold=3)
+        state = InstanceState(config)
+
+        # Transition to ACTIVE
+        for _ in range(3):
+            state.ping()
+        assert state.is_active
+
+        # Transition back to STANDBY
+        mock_uptime.side_effect = None
+        mock_uptime.return_value = 100
+        for _ in range(3):
+            state.ping()
+        assert not state.is_active
+
+        # Counters reset, so one more success should NOT trigger anything weird
+        state.ping()
+        # Need full threshold of failures to go back to ACTIVE
+        mock_uptime.side_effect = ZpingError("unreachable")
+        state.ping()
+        state.ping()
+        assert not state.is_active  # only 2 failures, counter was reset

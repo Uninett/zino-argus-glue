@@ -14,6 +14,7 @@ from simple_rest_client.exceptions import (
     NotFoundError,
     ServerError,
 )
+from zinolib.ritz import NotifierResponse
 
 import zinoargus
 
@@ -155,3 +156,121 @@ class TestRunSupervised:
         base = zinoargus.RECONNECT_BACKOFF_BASE.total_seconds()
         delays = [call.args[0] for call in sleep.call_args_list]
         assert delays == [base, base]
+
+
+class TestRefreshArgusIncidents:
+    def _incident(self, pk, **kwargs):
+        incident = MagicMock()
+        incident.pk = pk
+        incident.acked = kwargs.get("acked", False)
+        incident.open = kwargs.get("open", True)
+        return incident
+
+    @patch("zinoargus.time.sleep")
+    def test_when_one_incident_is_transiently_unavailable_then_it_should_skip_and_continue(
+        self, _sleep, monkeypatch
+    ):
+        monkeypatch.setattr(zinoargus, "_config", _make_config())
+        argus = MagicMock()
+
+        def get_incident(pk):
+            if pk == 1:
+                raise _server_error()
+            return self._incident(pk)
+
+        argus.get_incident.side_effect = get_incident
+        monkeypatch.setattr(zinoargus, "_argus", argus)
+
+        argus_incidents = {10: self._incident(1), 20: self._incident(2)}
+        zino_cases = {10: MagicMock(), 20: MagicMock()}
+
+        zinoargus.refresh_argus_incidents(argus_incidents, zino_cases)
+
+        # Case 10 (pk 1) is skipped, but case 20 (pk 2) is refreshed.
+        assert argus_incidents[10].pk == 1  # untouched original
+        assert argus_incidents[20].pk == 2  # replaced with the fetched incident
+
+    def test_when_an_incident_returns_not_found_then_it_should_skip_and_continue(
+        self, monkeypatch
+    ):
+        # A 404 (incident deleted server-side) must be skipped in place, not allowed
+        # to escape and trigger a Zino reconnect.
+        monkeypatch.setattr(zinoargus, "_config", _make_config())
+        argus = MagicMock()
+
+        def get_incident(pk):
+            if pk == 1:
+                raise _not_found_error()
+            return self._incident(pk)
+
+        argus.get_incident.side_effect = get_incident
+        monkeypatch.setattr(zinoargus, "_argus", argus)
+
+        argus_incidents = {10: self._incident(1), 20: self._incident(2)}
+        zino_cases = {10: MagicMock(), 20: MagicMock()}
+
+        zinoargus.refresh_argus_incidents(argus_incidents, zino_cases)
+
+        assert argus_incidents[10].pk == 1  # skipped, untouched
+        assert argus_incidents[20].pk == 2  # still refreshed
+
+    def test_when_an_incident_refresh_raises_auth_error_then_it_should_propagate(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(zinoargus, "_config", _make_config())
+        argus = MagicMock()
+        argus.get_incident.side_effect = _auth_error()
+        monkeypatch.setattr(zinoargus, "_argus", argus)
+
+        argus_incidents = {10: self._incident(1)}
+        zino_cases = {10: MagicMock()}
+
+        with pytest.raises(AuthError):
+            zinoargus.refresh_argus_incidents(argus_incidents, zino_cases)
+
+
+class TestSynchronizeContinuously:
+    """Exercises a single guarded iteration of the event loop.
+
+    The loop runs forever, so each test makes the *second* notifier poll raise
+    ``SystemExit`` to break out once the behaviour under test has occurred.
+    """
+
+    def _setup(self, monkeypatch, poll_side_effect):
+        monkeypatch.setattr(zinoargus, "_config", _make_config())
+        notifier = MagicMock()
+        notifier.poll.side_effect = poll_side_effect
+        monkeypatch.setattr(zinoargus, "_notifier", notifier)
+        monkeypatch.setattr(zinoargus, "_zino", MagicMock())
+        monkeypatch.setattr(zinoargus, "_argus", MagicMock())
+        instance = MagicMock()
+        instance.is_active = True
+        return instance
+
+    def test_when_argus_processing_raises_transient_error_then_the_loop_should_continue(
+        self, monkeypatch
+    ):
+        update = NotifierResponse(id=42, type="state", info="open down")
+        instance = self._setup(monkeypatch, [update, SystemExit()])
+        monkeypatch.setattr(zinoargus, "is_case_interesting", lambda case: True)
+        monkeypatch.setattr(
+            zinoargus,
+            "get_or_make_argus_incident_for_zino_case",
+            MagicMock(side_effect=_server_error()),
+        )
+
+        # Reaching the second poll (SystemExit) proves the transient error on the
+        # first update was swallowed and the loop kept going.
+        with pytest.raises(SystemExit):
+            zinoargus.synchronize_continuously({}, {}, instance)
+
+    def test_when_zino_connection_drops_then_the_error_should_propagate(
+        self, monkeypatch
+    ):
+        update = NotifierResponse(id=42, type="state", info="open down")
+        instance = self._setup(monkeypatch, [update])
+        # Fetching the case details hits Zino and must not be swallowed.
+        zinoargus._zino.case.side_effect = ritz.NotConnectedError("down")
+
+        with pytest.raises(ritz.NotConnectedError):
+            zinoargus.synchronize_continuously({}, {}, instance)

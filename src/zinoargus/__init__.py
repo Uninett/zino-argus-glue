@@ -30,6 +30,7 @@ from pyargus.models import Event, Incident
 from simple_rest_client.exceptions import (
     AuthError,
     ClientConnectionError,
+    ClientError,
     ServerError,
 )
 from zinolib.ritz import NotifierResponse
@@ -78,6 +79,11 @@ ARGUS_RETRY_FACTOR = 2
 # Argus errors worth retrying: server-side (5xx) and network/connection failures.
 # Other client errors (4xx) are not retried — a 404/400 won't fix itself.
 RETRYABLE_ARGUS_ERRORS = (ServerError, ClientConnectionError)
+# Argus errors a boundary guard should log and skip rather than let crash the
+# daemon: the retryable ones plus other client errors (e.g. an incident deleted
+# server-side returns 404).  AuthError is a ClientError subclass but is fatal, so
+# the guards re-raise it explicitly before falling back to this catch-all.
+SKIPPABLE_ARGUS_ERRORS = (ServerError, ClientConnectionError, ClientError)
 
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
@@ -402,15 +408,33 @@ def synchronize_continuously(
         if not instance.is_active:
             continue
 
-        incident = get_or_make_argus_incident_for_zino_case(
-            update.id, case, argus_incidents
-        )
+        # Zino reads/writes above this point are intentionally unguarded: a Zino
+        # connection error must propagate to the supervisor for a reconnect.  Only
+        # the Argus-side work below is shielded from transient REST errors.
+        try:
+            incident = get_or_make_argus_incident_for_zino_case(
+                update.id, case, argus_incidents
+            )
 
-        if update.type == "state":
-            update_state(update, case, incident, zino_cases, argus_incidents)
+            if update.type == "state":
+                update_state(update, case, incident, zino_cases, argus_incidents)
 
-        if update.type == "history":
-            synchronize_case_history(case, incident)
+            if update.type == "history":
+                synchronize_case_history(case, incident)
+        except AuthError:
+            # Fatal: propagate to the supervisor, which exits.
+            raise
+        except SKIPPABLE_ARGUS_ERRORS as error:
+            # Skip this update. State/history changes for an existing incident are
+            # reconciled by the next refresh cycle. A brand-new case whose incident
+            # creation failed here is only retried on its next Zino notification, or
+            # on the next full re-sync after a reconnect.
+            _logger.warning(
+                "Skipping update for Zino case %s, Argus error: %s",
+                update.id,
+                error,
+            )
+            continue
 
 
 def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
@@ -421,22 +445,35 @@ def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
     """
     do_update_on_ack = _config.sync.acknowledge.setstate != "none"
     _logger.info("Refreshing %s Argus incidents", len(argus_incidents))
-    for case_id, old_incident in argus_incidents.items():
-        new_incident = call_argus(_argus.get_incident, old_incident.pk)
-        argus_incidents[case_id] = new_incident
+    # Iterate over a snapshot: the loop body may mutate argus_incidents.
+    for case_id, old_incident in list(argus_incidents.items()):
+        try:
+            new_incident = call_argus(_argus.get_incident, old_incident.pk)
+            argus_incidents[case_id] = new_incident
 
-        if do_update_on_ack and new_incident.acked and not old_incident.acked:
-            update_case_acknowledged(
-                incident=new_incident,
-                case=zino_cases[case_id],
-                desired_state=_config.sync.acknowledge.setstate,
+            if do_update_on_ack and new_incident.acked and not old_incident.acked:
+                update_case_acknowledged(
+                    incident=new_incident,
+                    case=zino_cases[case_id],
+                    desired_state=_config.sync.acknowledge.setstate,
+                )
+
+            if _config.sync.ticket.enable:
+                update_case_ticket(incident=new_incident, case_id=case_id)
+
+            if not new_incident.open and old_incident.open:
+                update_case_closed(incident=new_incident, case=zino_cases[case_id])
+        except AuthError:
+            # Fatal: propagate to the supervisor, which exits.
+            raise
+        except SKIPPABLE_ARGUS_ERRORS as error:
+            # Skip just this incident; the next refresh cycle will retry it.
+            _logger.warning(
+                "Skipping refresh of Argus incident %s, Argus error: %s",
+                old_incident.pk,
+                error,
             )
-
-        if _config.sync.ticket.enable:
-            update_case_ticket(incident=new_incident, case_id=case_id)
-
-        if not new_incident.open and old_incident.open:
-            update_case_closed(incident=new_incident, case=zino_cases[case_id])
+            continue
 
 
 def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state: str):

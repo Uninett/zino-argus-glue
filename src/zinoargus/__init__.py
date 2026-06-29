@@ -18,6 +18,7 @@ import argparse
 import logging
 import signal
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from operator import itemgetter
 from typing import Optional
@@ -26,7 +27,11 @@ import requests
 import zinolib as ritz
 from pyargus.client import Client
 from pyargus.models import Event, Incident
-from simple_rest_client.exceptions import ClientConnectionError
+from simple_rest_client.exceptions import (
+    AuthError,
+    ClientConnectionError,
+    ServerError,
+)
 from zinolib.ritz import NotifierResponse
 
 from zinoargus.config import (
@@ -55,6 +60,14 @@ PING_INTERVAL = timedelta(seconds=5)
 INCIDENT_REFRESH_INTERVAL = timedelta(seconds=30)
 MY_TZINFO = datetime.now().astimezone().tzinfo
 
+# Exponential backoff for reconnecting to Zino after a dropped/failed connection
+RECONNECT_BACKOFF_BASE = timedelta(seconds=5)
+RECONNECT_BACKOFF_MAX = timedelta(seconds=300)
+RECONNECT_BACKOFF_FACTOR = 2
+# A connection that stayed up at least this long is considered healthy, so the
+# backoff delay is reset to the base value before the next reconnect attempt.
+RECONNECT_RESET_AFTER = timedelta(seconds=60)
+
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
 _notifier: Optional[ritz.notifier] = None
@@ -65,8 +78,6 @@ _last_ping = datetime.now()
 
 
 def main():
-    global _zino
-    global _notifier
     global _argus
     global _config
 
@@ -91,37 +102,72 @@ def main():
 
     _argus = get_argus_client(_config.argus)
 
-    """Initiate connectionloop to Zino"""
-    try:
-        _zino, _notifier = connect_to_zino(_config.zino)
-        start()
+    run_supervised()
 
-        # TODO: If the Zino connection errors out, this should try to reconnect rather than die
-    except ritz.AuthenticationError:
-        _logger.critical("Unable to authenticate against Zino, retrying in 30sec")
-    except ritz.NotConnectedError:
-        _logger.critical("Lost connection with Zino, retrying in 30sec")
-    except ConnectionRefusedError:
-        _logger.critical(
-            "Connection refused by Zino (%s:%s)", _config.zino.server, _config.zino.port
-        )
-    except ClientConnectionError:
-        _logger.critical("Connection refused by Argus (%s)", _config.argus.url)
-    except KeyboardInterrupt:
-        _logger.critical("CTRL+C detected, exiting application")
-    except SystemExit:
-        _logger.critical("Received sigterm, exiting")
-    except Exception:  # pylint: disable=broad-except
-        # Break on an unhandled exception
-        _logger.critical("Unhandled exception from main event loop", exc_info=True)
-    finally:
+
+def run_supervised():
+    """Supervise the Zino connection and event loop, reconnecting after transient
+    failures with exponential backoff.
+
+    The Zino protocol is stateful, so any lost connection or protocol error requires
+    a full reconnect and re-sync.  Fatal conditions (bad credentials on either side)
+    cannot be recovered by retrying, so they terminate the daemon.
+    """
+    global _zino
+    global _notifier
+
+    delay = RECONNECT_BACKOFF_BASE
+    while True:
+        connected_at = None
         try:
-            _zino.close()
-        except Exception:  # noqa
-            pass
+            _zino, _notifier = connect_to_zino(_config.zino)
+            # Monotonic clock: measuring session duration must be immune to wall
+            # clock adjustments (NTP steps, DST).
+            connected_at = time.monotonic()
+            start()
+        except (ritz.AuthenticationError, AuthError) as error:
+            # Bad credentials/token won't fix themselves by retrying
+            _logger.critical("Fatal authentication error, exiting: %s", error)
+            break
+        except (KeyboardInterrupt, SystemExit):
+            _logger.info("Shutdown requested, exiting")
+            break
+        except (
+            ritz.NotConnectedError,
+            ritz.ProtocolError,
+            ConnectionError,
+            TimeoutError,
+            # Backstop for Argus errors raised outside a boundary guard (e.g. the
+            # unguarded calls during the initial full sync). Steady-state Argus
+            # errors are handled in place and never reach here.
+            ClientConnectionError,
+            ServerError,
+        ) as error:
+            _logger.error("Lost connection (%s), reconnecting", error)
+        except Exception:  # pylint: disable=broad-except
+            _logger.critical(
+                "Unhandled exception from main event loop, reconnecting",
+                exc_info=True,
+            )
+        finally:
+            try:
+                _zino.close()
+            except Exception:  # noqa
+                pass
+            _zino = None
+            _notifier = None
 
-        _zino = None
-        _notifier = None
+        # A connection that stayed up long enough is treated as healthy, so the
+        # next blip starts backing off from scratch rather than from a grown delay.
+        if (
+            connected_at is not None
+            and time.monotonic() - connected_at > RECONNECT_RESET_AFTER.total_seconds()
+        ):
+            delay = RECONNECT_BACKOFF_BASE
+
+        _logger.info("Reconnecting in %s seconds", delay.total_seconds())
+        time.sleep(delay.total_seconds())
+        delay = min(delay * RECONNECT_BACKOFF_FACTOR, RECONNECT_BACKOFF_MAX)
 
 
 def connect_to_zino(

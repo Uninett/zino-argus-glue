@@ -653,11 +653,37 @@ def create_argus_incident(zino_case: ritz.Case):
         end_time=datetime.max,
         source_incident_id=zino_case.id,
         description=description,
+        level=resolve_severity(zino_case),
         tags=dict(generate_tags(zino_case)),
     )
     incident = _argus.post_incident(incident)
     synchronize_case_history(zino_case, incident)
     return incident
+
+
+def resolve_severity(zino_case: ritz.Case) -> int:
+    """Resolve the Argus incident level for a Zino case.
+
+    Maps the case's Zino ``priority`` (higher is more important) to an Argus
+    ``level`` (1=Critical .. 5=Information; lower is more severe) using the
+    configured severity bands. When no band matches the priority, the configured
+    ``default`` level is returned, so every incident always gets an explicit
+    level.
+    """
+    severity = _config.sync.severity
+
+    # priority is forced to int by zinolib on case load, so the isinstance
+    # guard is belt-and-suspenders rather than a routine code path. A None
+    # check would be dead code: zinolib's Case.__getattr__ returns the Case
+    # itself for absent attributes, never None.
+    priority = zino_case.priority
+    if not isinstance(priority, int):
+        return severity.default
+
+    for band in sorted(severity.thresholds, key=lambda b: b.min_priority, reverse=True):
+        if priority >= band.min_priority:
+            return band.level
+    return severity.default
 
 
 def setup_logging(verbosity: int = 0):

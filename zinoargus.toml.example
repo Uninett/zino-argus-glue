@@ -27,9 +27,11 @@ acknowledge.setstate = "none"
 # entries.  Set this to `true` to do so:
 ticket.enable = false
 
-[metadata]
-# Optional circuit metadata from telemator
-ports_url = "http://telemator.circuit.mapping.server/tm/curitz_circuitmapping.json"
+# Circuit metadata from telemator. NOT currently usable: the fetch is unguarded,
+# so a slow or unavailable endpoint will crash the glue service. Leave this
+# commented out until the metadata feature is actually implemented.
+#[metadata]
+#ports_url = "http://telemator.circuit.mapping.server/tm/curitz_circuitmapping.json"
 
 # Optional failover configuration for primary/secondary deployments.
 # When this section is absent, the daemon runs in primary mode (always

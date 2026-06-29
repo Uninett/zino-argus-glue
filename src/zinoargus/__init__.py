@@ -68,6 +68,17 @@ RECONNECT_BACKOFF_FACTOR = 2
 # backoff delay is reset to the base value before the next reconnect attempt.
 RECONNECT_RESET_AFTER = timedelta(seconds=60)
 
+# Bounded retries for individual Argus REST operations.  Argus is a stateless REST
+# API, so transient errors (5xx, network blips) are retried in place rather than
+# tearing down the whole event loop.
+ARGUS_RETRY_ATTEMPTS = 3
+ARGUS_RETRY_BASE = timedelta(seconds=1)
+ARGUS_RETRY_MAX = timedelta(seconds=10)
+ARGUS_RETRY_FACTOR = 2
+# Argus errors worth retrying: server-side (5xx) and network/connection failures.
+# Other client errors (4xx) are not retried — a 404/400 won't fix itself.
+RETRYABLE_ARGUS_ERRORS = (ServerError, ClientConnectionError)
+
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
 _notifier: Optional[ritz.notifier] = None
@@ -194,6 +205,45 @@ def get_argus_client(configuration: ArgusConfiguration) -> Client:
     )
 
 
+def call_argus(operation, *args, **kwargs):
+    """Invoke an Argus client operation, retrying transient errors with bounded
+    exponential backoff.
+
+    Server (5xx) and network errors are retried up to ``ARGUS_RETRY_ATTEMPTS`` times;
+    the last error is re-raised on exhaustion so the caller's boundary guard can log
+    and skip the operation.  ``AuthError`` is never retried (a bad token won't fix
+    itself) and propagates to the supervisor, which exits.
+    """
+    delay = ARGUS_RETRY_BASE
+    for attempt in range(1, ARGUS_RETRY_ATTEMPTS + 1):
+        try:
+            return operation(*args, **kwargs)
+        except AuthError:
+            raise
+        except RETRYABLE_ARGUS_ERRORS as error:
+            if attempt == ARGUS_RETRY_ATTEMPTS:
+                _logger.error(
+                    "Argus operation %s failed after %s attempts: %s",
+                    getattr(operation, "__name__", operation),
+                    attempt,
+                    error,
+                )
+                raise
+            _logger.warning(
+                "Argus operation %s failed (%s), retry %s/%s in %s seconds",
+                getattr(operation, "__name__", operation),
+                error,
+                attempt,
+                ARGUS_RETRY_ATTEMPTS,
+                delay.total_seconds(),
+            )
+            time.sleep(delay.total_seconds())
+            delay = min(delay * ARGUS_RETRY_FACTOR, ARGUS_RETRY_MAX)
+    # The loop always returns or re-raises; this guards against a future edit
+    # introducing a path that falls through and silently returns None.
+    raise RuntimeError("call_argus exhausted its loop without returning")
+
+
 def start():
     """This is the main "event loop" of the Zino-Argus glue service, called when there
     are successful connections to the Zino and Argus API, and torn down when the
@@ -232,7 +282,7 @@ def get_all_my_argus_incidents() -> IncidentMap:
     this glue service instance.
     """
     argus_incidents: IncidentMap = {}
-    for incident in _argus.get_my_incidents(open=True):
+    for incident in call_argus(lambda: list(_argus.get_my_incidents(open=True))):
         if not incident.source_incident_id:
             _logger.error(
                 "Ignoring incident %s with no 'source_incident_id' set (%r)",
@@ -372,7 +422,7 @@ def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
     do_update_on_ack = _config.sync.acknowledge.setstate != "none"
     _logger.info("Refreshing %s Argus incidents", len(argus_incidents))
     for case_id, old_incident in argus_incidents.items():
-        new_incident = _argus.get_incident(old_incident.pk)
+        new_incident = call_argus(_argus.get_incident, old_incident.pk)
         argus_incidents[case_id] = new_incident
 
         if do_update_on_ack and new_incident.acked and not old_incident.acked:
@@ -398,7 +448,7 @@ def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state:
 
     _logger.info(msg + ", setting Zino case to %r", incident.pk, case_id, desired_state)
 
-    acks = _argus.get_incident_acknowledgements(incident)
+    acks = call_argus(_argus.get_incident_acknowledgements, incident)
     acks.sort(key=lambda ack: ack.event.timestamp, reverse=True)
     _logger.debug("Argus incident %s acks: %r", incident.pk, acks)
 
@@ -440,7 +490,7 @@ def find_who_added_incident_ticket(incident: Incident, ticket_url: str) -> str:
     # timestamp (they seem to be by Argus 2.0, at least), so the first event we
     # find that contains the ticket URL should be the event that represents the change
     # to the current value.
-    for event in _argus.get_incident_events(incident):
+    for event in call_argus(_argus.get_incident_events, incident):
         if (
             event.type == INCIDENT_ATTRIBUTE_CHANGE_TYPE
             and ticket_url in event.description
@@ -461,7 +511,7 @@ def update_case_closed(incident: Incident, case: ritz.Case):
         incident.pk,
     )
 
-    events = _argus.get_incident_events(incident)
+    events = call_argus(_argus.get_incident_events, incident)
     events.sort(key=lambda event: event.timestamp, reverse=True)
     _logger.debug("Argus incident %s events: %r", incident.pk, events)
 
@@ -498,7 +548,7 @@ def synchronize_case_history(case: ritz.Case, incident: Incident):
     log entry with the user we have saved as our Zino username.
     """
     history = _zino.get_history(case.id)
-    existing_events = _argus.get_incident_events(incident)
+    existing_events = call_argus(_argus.get_incident_events, incident)
     # Filter out events that seem to originate from this glue service actor:
     my_actor = next(event.actor for event in existing_events if event.type == "STA")
     my_events_by_timestamp = {
@@ -547,8 +597,9 @@ def get_or_make_argus_incident_for_zino_case(
     if case_id in argus_incidents:
         return argus_incidents[case_id]
 
-    incidents = _argus.get_my_incidents(source_incident_id=case_id)
-    incident = next(incidents, None)
+    incident = call_argus(
+        lambda: next(_argus.get_my_incidents(source_incident_id=case_id), None)
+    )
     if incident:
         argus_incidents[case_id] = incident
         return incident

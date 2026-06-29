@@ -6,9 +6,12 @@ best-effort circuit-metadata fetch.
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
 import zinolib as ritz
 from simple_rest_client.exceptions import (
     AuthError,
+    ClientConnectionError,
+    NotFoundError,
     ServerError,
 )
 
@@ -23,12 +26,55 @@ def _auth_error(message="bad token"):
     return AuthError(message=message, response=MagicMock())
 
 
+def _not_found_error(message="gone"):
+    return NotFoundError(message=message, response=MagicMock())
+
+
 def _make_config():
     """A config mock covering the attributes the refresh path reads."""
     config = MagicMock()
     config.sync.acknowledge.setstate = "none"
     config.sync.ticket.enable = False
     return config
+
+
+@patch("zinoargus.time.sleep")
+class TestCallArgus:
+    def test_when_operation_succeeds_then_it_should_return_the_result(self, _sleep):
+        operation = MagicMock(return_value="result")
+        assert zinoargus.call_argus(operation, 1, kw=2) == "result"
+        operation.assert_called_once_with(1, kw=2)
+
+    def test_when_a_transient_error_clears_then_it_should_retry(self, _sleep):
+        operation = MagicMock(side_effect=[_server_error(), "result"])
+        assert zinoargus.call_argus(operation) == "result"
+        assert operation.call_count == 2
+
+    def test_when_a_connection_error_clears_then_it_should_retry(self, _sleep):
+        operation = MagicMock(side_effect=[ClientConnectionError("net"), "result"])
+        assert zinoargus.call_argus(operation) == "result"
+        assert operation.call_count == 2
+
+    def test_when_auth_error_then_it_should_not_retry(self, _sleep):
+        operation = MagicMock(side_effect=_auth_error())
+        with pytest.raises(AuthError):
+            zinoargus.call_argus(operation)
+        operation.assert_called_once()
+
+    def test_when_client_error_then_it_should_not_retry(self, _sleep):
+        # A 4xx such as 404 won't fix itself, so it propagates without retrying.
+        operation = MagicMock(side_effect=_not_found_error())
+        with pytest.raises(NotFoundError):
+            zinoargus.call_argus(operation)
+        operation.assert_called_once()
+
+    def test_when_transient_errors_exhaust_attempts_then_it_should_reraise(
+        self, _sleep
+    ):
+        operation = MagicMock(side_effect=_server_error())
+        with pytest.raises(ServerError):
+            zinoargus.call_argus(operation)
+        assert operation.call_count == zinoargus.ARGUS_RETRY_ATTEMPTS
 
 
 @patch("zinoargus.time.sleep")

@@ -16,9 +16,16 @@
 
 """Zino configuration models"""
 
-from typing import Literal, Optional, Union
+from typing import List, Literal, Optional, Union
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, IPvAnyAddress, PositiveFloat
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    IPvAnyAddress,
+    PositiveFloat,
+)
 
 Host = Union[IPvAnyAddress, str]
 
@@ -72,6 +79,36 @@ class TicketSyncConfiguration(BaseModel):
     enable: bool = False
 
 
+class SeverityBand(BaseModel):
+    """A single Zino-priority-to-Argus-level mapping band.
+
+    A case is assigned this band's Argus ``level`` when its Zino ``priority``
+    is greater than or equal to ``min_priority``.
+    """
+
+    # throw ValidationError on extra keys
+    model_config = ConfigDict(extra="forbid")
+
+    min_priority: int = Field(ge=0)
+    # Argus levels run 1 (Critical) to 5 (Information); lower is more severe.
+    level: int = Field(ge=1, le=5)
+
+
+class SeverityConfiguration(BaseModel):
+    """Class for modeling Argus incident severity mapping configuration.
+
+    Maps a Zino case's ``priority`` (higher means more important) to an Argus
+    incident ``level`` (1=Critical .. 5=Information; lower means more severe).
+    """
+
+    # throw ValidationError on extra keys
+    model_config = ConfigDict(extra="forbid")
+
+    # Argus level used when a case's priority is below every configured band.
+    default: int = Field(default=3, ge=1, le=5)
+    thresholds: List[SeverityBand] = Field(default_factory=list)
+
+
 class SyncConfiguration(BaseModel):
     """Class for modeling synchronization behavior configuration"""
 
@@ -80,6 +117,10 @@ class SyncConfiguration(BaseModel):
 
     acknowledge: Optional[AcknowledgeSyncConfiguration] = AcknowledgeSyncConfiguration()
     ticket: Optional[TicketSyncConfiguration] = TicketSyncConfiguration()
+    # Severity mapping is always active: an absent [sync.severity] block yields
+    # these defaults, so every Argus incident gets an explicit level (3/Moderate
+    # by default) rather than relying on Argus's own server-side default.
+    severity: SeverityConfiguration = SeverityConfiguration()
 
 
 class FailoverConfiguration(BaseModel):

@@ -27,6 +27,33 @@ acknowledge.setstate = "none"
 # entries.  Set this to `true` to do so:
 ticket.enable = false
 
+# Mapping of Zino case priority to Argus incident severity level.  Every
+# incident is assigned an explicit Argus level; the `default` below applies
+# when no threshold band matches (or when no bands are configured at all).
+#
+# Zino priority is an open-ended integer (higher means more important); Argus
+# level is 1-5 where 1=Critical, 2=High, 3=Moderate, 4=Low, 5=Information
+# (lower means more severe).  Note that the two scales run in opposite
+# directions: a high Zino priority maps to a low Argus level.
+[sync.severity]
+# Argus level assigned when a case's Zino priority is below every band below.
+default = 3
+#
+# Each band maps a minimum Zino priority to an Argus level.  A case is assigned
+# the level of the highest band whose min_priority its Zino priority meets.
+#[[sync.severity.thresholds]]
+#min_priority = 500   # Zino priority >= 500 -> Argus level 1 (Critical)
+#level = 1
+#[[sync.severity.thresholds]]
+#min_priority = 300   # Zino priority >= 300 -> Argus level 2 (High)
+#level = 2
+#[[sync.severity.thresholds]]
+#min_priority = 100   # Zino priority >= 100 -> Argus level 3 (Moderate)
+#level = 3
+#[[sync.severity.thresholds]]
+#min_priority = 1     # Zino priority >= 1   -> Argus level 4 (Low)
+#level = 4
+
 # Circuit metadata from telemator. NOT currently usable: the fetch is unguarded,
 # so a slow or unavailable endpoint will crash the glue service. Leave this
 # commented out until the metadata feature is actually implemented.

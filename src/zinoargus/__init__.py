@@ -18,6 +18,7 @@ import argparse
 import logging
 import signal
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from operator import itemgetter
 from typing import Optional
@@ -26,7 +27,12 @@ import requests
 import zinolib as ritz
 from pyargus.client import Client
 from pyargus.models import Event, Incident
-from simple_rest_client.exceptions import ClientConnectionError
+from simple_rest_client.exceptions import (
+    AuthError,
+    ClientConnectionError,
+    ClientError,
+    ServerError,
+)
 from zinolib.ritz import NotifierResponse
 
 from zinoargus.config import (
@@ -55,6 +61,30 @@ PING_INTERVAL = timedelta(seconds=5)
 INCIDENT_REFRESH_INTERVAL = timedelta(seconds=30)
 MY_TZINFO = datetime.now().astimezone().tzinfo
 
+# Exponential backoff for reconnecting to Zino after a dropped/failed connection
+RECONNECT_BACKOFF_BASE = timedelta(seconds=5)
+RECONNECT_BACKOFF_MAX = timedelta(seconds=300)
+RECONNECT_BACKOFF_FACTOR = 2
+# A connection that stayed up at least this long is considered healthy, so the
+# backoff delay is reset to the base value before the next reconnect attempt.
+RECONNECT_RESET_AFTER = timedelta(seconds=60)
+
+# Bounded retries for individual Argus REST operations.  Argus is a stateless REST
+# API, so transient errors (5xx, network blips) are retried in place rather than
+# tearing down the whole event loop.
+ARGUS_RETRY_ATTEMPTS = 3
+ARGUS_RETRY_BASE = timedelta(seconds=1)
+ARGUS_RETRY_MAX = timedelta(seconds=10)
+ARGUS_RETRY_FACTOR = 2
+# Argus errors worth retrying: server-side (5xx) and network/connection failures.
+# Other client errors (4xx) are not retried — a 404/400 won't fix itself.
+RETRYABLE_ARGUS_ERRORS = (ServerError, ClientConnectionError)
+# Argus errors a boundary guard should log and skip rather than let crash the
+# daemon: the retryable ones plus other client errors (e.g. an incident deleted
+# server-side returns 404).  AuthError is a ClientError subclass but is fatal, so
+# the guards re-raise it explicitly before falling back to this catch-all.
+SKIPPABLE_ARGUS_ERRORS = (ServerError, ClientConnectionError, ClientError)
+
 _config: Optional[Configuration] = None
 _zino: Optional[ritz.ritz] = None
 _notifier: Optional[ritz.notifier] = None
@@ -65,8 +95,6 @@ _last_ping = datetime.now()
 
 
 def main():
-    global _zino
-    global _notifier
     global _argus
     global _config
 
@@ -91,37 +119,72 @@ def main():
 
     _argus = get_argus_client(_config.argus)
 
-    """Initiate connectionloop to Zino"""
-    try:
-        _zino, _notifier = connect_to_zino(_config.zino)
-        start()
+    run_supervised()
 
-        # TODO: If the Zino connection errors out, this should try to reconnect rather than die
-    except ritz.AuthenticationError:
-        _logger.critical("Unable to authenticate against Zino, retrying in 30sec")
-    except ritz.NotConnectedError:
-        _logger.critical("Lost connection with Zino, retrying in 30sec")
-    except ConnectionRefusedError:
-        _logger.critical(
-            "Connection refused by Zino (%s:%s)", _config.zino.server, _config.zino.port
-        )
-    except ClientConnectionError:
-        _logger.critical("Connection refused by Argus (%s)", _config.argus.url)
-    except KeyboardInterrupt:
-        _logger.critical("CTRL+C detected, exiting application")
-    except SystemExit:
-        _logger.critical("Received sigterm, exiting")
-    except Exception:  # pylint: disable=broad-except
-        # Break on an unhandled exception
-        _logger.critical("Unhandled exception from main event loop", exc_info=True)
-    finally:
+
+def run_supervised():
+    """Supervise the Zino connection and event loop, reconnecting after transient
+    failures with exponential backoff.
+
+    The Zino protocol is stateful, so any lost connection or protocol error requires
+    a full reconnect and re-sync.  Fatal conditions (bad credentials on either side)
+    cannot be recovered by retrying, so they terminate the daemon.
+    """
+    global _zino
+    global _notifier
+
+    delay = RECONNECT_BACKOFF_BASE
+    while True:
+        connected_at = None
         try:
-            _zino.close()
-        except Exception:  # noqa
-            pass
+            _zino, _notifier = connect_to_zino(_config.zino)
+            # Monotonic clock: measuring session duration must be immune to wall
+            # clock adjustments (NTP steps, DST).
+            connected_at = time.monotonic()
+            start()
+        except (ritz.AuthenticationError, AuthError) as error:
+            # Bad credentials/token won't fix themselves by retrying
+            _logger.critical("Fatal authentication error, exiting: %s", error)
+            break
+        except (KeyboardInterrupt, SystemExit):
+            _logger.info("Shutdown requested, exiting")
+            break
+        except (
+            ritz.NotConnectedError,
+            ritz.ProtocolError,
+            ConnectionError,
+            TimeoutError,
+            # Backstop for Argus errors raised outside a boundary guard (e.g. the
+            # unguarded calls during the initial full sync). Steady-state Argus
+            # errors are handled in place and never reach here.
+            ClientConnectionError,
+            ServerError,
+        ) as error:
+            _logger.error("Lost connection (%s), reconnecting", error)
+        except Exception:  # pylint: disable=broad-except
+            _logger.critical(
+                "Unhandled exception from main event loop, reconnecting",
+                exc_info=True,
+            )
+        finally:
+            try:
+                _zino.close()
+            except Exception:  # noqa
+                pass
+            _zino = None
+            _notifier = None
 
-        _zino = None
-        _notifier = None
+        # A connection that stayed up long enough is treated as healthy, so the
+        # next blip starts backing off from scratch rather than from a grown delay.
+        if (
+            connected_at is not None
+            and time.monotonic() - connected_at > RECONNECT_RESET_AFTER.total_seconds()
+        ):
+            delay = RECONNECT_BACKOFF_BASE
+
+        _logger.info("Reconnecting in %s seconds", delay.total_seconds())
+        time.sleep(delay.total_seconds())
+        delay = min(delay * RECONNECT_BACKOFF_FACTOR, RECONNECT_BACKOFF_MAX)
 
 
 def connect_to_zino(
@@ -146,6 +209,45 @@ def get_argus_client(configuration: ArgusConfiguration) -> Client:
         token=configuration.token,
         timeout=configuration.timeout,
     )
+
+
+def call_argus(operation, *args, **kwargs):
+    """Invoke an Argus client operation, retrying transient errors with bounded
+    exponential backoff.
+
+    Server (5xx) and network errors are retried up to ``ARGUS_RETRY_ATTEMPTS`` times;
+    the last error is re-raised on exhaustion so the caller's boundary guard can log
+    and skip the operation.  ``AuthError`` is never retried (a bad token won't fix
+    itself) and propagates to the supervisor, which exits.
+    """
+    delay = ARGUS_RETRY_BASE
+    for attempt in range(1, ARGUS_RETRY_ATTEMPTS + 1):
+        try:
+            return operation(*args, **kwargs)
+        except AuthError:
+            raise
+        except RETRYABLE_ARGUS_ERRORS as error:
+            if attempt == ARGUS_RETRY_ATTEMPTS:
+                _logger.error(
+                    "Argus operation %s failed after %s attempts: %s",
+                    getattr(operation, "__name__", operation),
+                    attempt,
+                    error,
+                )
+                raise
+            _logger.warning(
+                "Argus operation %s failed (%s), retry %s/%s in %s seconds",
+                getattr(operation, "__name__", operation),
+                error,
+                attempt,
+                ARGUS_RETRY_ATTEMPTS,
+                delay.total_seconds(),
+            )
+            time.sleep(delay.total_seconds())
+            delay = min(delay * ARGUS_RETRY_FACTOR, ARGUS_RETRY_MAX)
+    # The loop always returns or re-raises; this guards against a future edit
+    # introducing a path that falls through and silently returns None.
+    raise RuntimeError("call_argus exhausted its loop without returning")
 
 
 def start():
@@ -186,7 +288,7 @@ def get_all_my_argus_incidents() -> IncidentMap:
     this glue service instance.
     """
     argus_incidents: IncidentMap = {}
-    for incident in _argus.get_my_incidents(open=True):
+    for incident in call_argus(lambda: list(_argus.get_my_incidents(open=True))):
         if not incident.source_incident_id:
             _logger.error(
                 "Ignoring incident %s with no 'source_incident_id' set (%r)",
@@ -306,15 +408,33 @@ def synchronize_continuously(
         if not instance.is_active:
             continue
 
-        incident = get_or_make_argus_incident_for_zino_case(
-            update.id, case, argus_incidents
-        )
+        # Zino reads/writes above this point are intentionally unguarded: a Zino
+        # connection error must propagate to the supervisor for a reconnect.  Only
+        # the Argus-side work below is shielded from transient REST errors.
+        try:
+            incident = get_or_make_argus_incident_for_zino_case(
+                update.id, case, argus_incidents
+            )
 
-        if update.type == "state":
-            update_state(update, case, incident, zino_cases, argus_incidents)
+            if update.type == "state":
+                update_state(update, case, incident, zino_cases, argus_incidents)
 
-        if update.type == "history":
-            synchronize_case_history(case, incident)
+            if update.type == "history":
+                synchronize_case_history(case, incident)
+        except AuthError:
+            # Fatal: propagate to the supervisor, which exits.
+            raise
+        except SKIPPABLE_ARGUS_ERRORS as error:
+            # Skip this update. State/history changes for an existing incident are
+            # reconciled by the next refresh cycle. A brand-new case whose incident
+            # creation failed here is only retried on its next Zino notification, or
+            # on the next full re-sync after a reconnect.
+            _logger.warning(
+                "Skipping update for Zino case %s, Argus error: %s",
+                update.id,
+                error,
+            )
+            continue
 
 
 def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
@@ -325,22 +445,35 @@ def refresh_argus_incidents(argus_incidents: IncidentMap, zino_cases: CaseMap):
     """
     do_update_on_ack = _config.sync.acknowledge.setstate != "none"
     _logger.info("Refreshing %s Argus incidents", len(argus_incidents))
-    for case_id, old_incident in argus_incidents.items():
-        new_incident = _argus.get_incident(old_incident.pk)
-        argus_incidents[case_id] = new_incident
+    # Iterate over a snapshot: the loop body may mutate argus_incidents.
+    for case_id, old_incident in list(argus_incidents.items()):
+        try:
+            new_incident = call_argus(_argus.get_incident, old_incident.pk)
+            argus_incidents[case_id] = new_incident
 
-        if do_update_on_ack and new_incident.acked and not old_incident.acked:
-            update_case_acknowledged(
-                incident=new_incident,
-                case=zino_cases[case_id],
-                desired_state=_config.sync.acknowledge.setstate,
+            if do_update_on_ack and new_incident.acked and not old_incident.acked:
+                update_case_acknowledged(
+                    incident=new_incident,
+                    case=zino_cases[case_id],
+                    desired_state=_config.sync.acknowledge.setstate,
+                )
+
+            if _config.sync.ticket.enable:
+                update_case_ticket(incident=new_incident, case_id=case_id)
+
+            if not new_incident.open and old_incident.open:
+                update_case_closed(incident=new_incident, case=zino_cases[case_id])
+        except AuthError:
+            # Fatal: propagate to the supervisor, which exits.
+            raise
+        except SKIPPABLE_ARGUS_ERRORS as error:
+            # Skip just this incident; the next refresh cycle will retry it.
+            _logger.warning(
+                "Skipping refresh of Argus incident %s, Argus error: %s",
+                old_incident.pk,
+                error,
             )
-
-        if _config.sync.ticket.enable:
-            update_case_ticket(incident=new_incident, case_id=case_id)
-
-        if not new_incident.open and old_incident.open:
-            update_case_closed(incident=new_incident, case=zino_cases[case_id])
+            continue
 
 
 def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state: str):
@@ -352,7 +485,7 @@ def update_case_acknowledged(incident: Incident, case: ritz.Case, desired_state:
 
     _logger.info(msg + ", setting Zino case to %r", incident.pk, case_id, desired_state)
 
-    acks = _argus.get_incident_acknowledgements(incident)
+    acks = call_argus(_argus.get_incident_acknowledgements, incident)
     acks.sort(key=lambda ack: ack.event.timestamp, reverse=True)
     _logger.debug("Argus incident %s acks: %r", incident.pk, acks)
 
@@ -394,7 +527,7 @@ def find_who_added_incident_ticket(incident: Incident, ticket_url: str) -> str:
     # timestamp (they seem to be by Argus 2.0, at least), so the first event we
     # find that contains the ticket URL should be the event that represents the change
     # to the current value.
-    for event in _argus.get_incident_events(incident):
+    for event in call_argus(_argus.get_incident_events, incident):
         if (
             event.type == INCIDENT_ATTRIBUTE_CHANGE_TYPE
             and ticket_url in event.description
@@ -415,7 +548,7 @@ def update_case_closed(incident: Incident, case: ritz.Case):
         incident.pk,
     )
 
-    events = _argus.get_incident_events(incident)
+    events = call_argus(_argus.get_incident_events, incident)
     events.sort(key=lambda event: event.timestamp, reverse=True)
     _logger.debug("Argus incident %s events: %r", incident.pk, events)
 
@@ -452,7 +585,7 @@ def synchronize_case_history(case: ritz.Case, incident: Incident):
     log entry with the user we have saved as our Zino username.
     """
     history = _zino.get_history(case.id)
-    existing_events = _argus.get_incident_events(incident)
+    existing_events = call_argus(_argus.get_incident_events, incident)
     # Filter out events that seem to originate from this glue service actor:
     my_actor = next(event.actor for event in existing_events if event.type == "STA")
     my_events_by_timestamp = {
@@ -501,8 +634,9 @@ def get_or_make_argus_incident_for_zino_case(
     if case_id in argus_incidents:
         return argus_incidents[case_id]
 
-    incidents = _argus.get_my_incidents(source_incident_id=case_id)
-    incident = next(incidents, None)
+    incident = call_argus(
+        lambda: next(_argus.get_my_incidents(source_incident_id=case_id), None)
+    )
     if incident:
         argus_incidents[case_id] = incident
         return incident

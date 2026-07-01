@@ -1,0 +1,1 @@
+Made the daemon resilient to transient faults instead of exiting on the first error. It now reconnects to Zino with exponential backoff after a dropped connection and retries intermittent Argus REST errors (5xx/network) in place. Authentication failures on either side remain fatal.

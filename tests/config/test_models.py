@@ -5,6 +5,7 @@ from zinoargus.config.models import (
     Configuration,
     FailoverConfiguration,
     SeverityConfiguration,
+    ZinoConfiguration,
 )
 
 
@@ -29,6 +30,24 @@ class TestFailoverConfiguration:
     def test_when_extra_field_given_it_should_not_validate(self):
         with pytest.raises(pydantic.ValidationError):
             FailoverConfiguration(primary_server="10.0.0.1", bogus="value")
+
+
+class TestZinoConfiguration:
+    def _minimal_kwargs(self, **extra):
+        return {
+            "server": "zino.example.org",
+            "user": "zinouser",
+            "secret": "secret",
+            **extra,
+        }
+
+    def test_when_given_a_value_then_default_domain_should_be_retained(self):
+        config = ZinoConfiguration(**self._minimal_kwargs(default_domain="example.org"))
+        assert config.default_domain == "example.org"
+
+    def test_when_omitted_then_default_domain_should_default_to_none(self):
+        config = ZinoConfiguration(**self._minimal_kwargs())
+        assert config.default_domain is None
 
 
 class TestConfigurationFailover:

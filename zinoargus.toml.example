@@ -15,6 +15,11 @@ port = 8001
 user = "zinouser"
 secret = "1234123412341234123412341324123413241"
 
+# Optional domain used to build the Argus `host` tag as an FQDN. When set,
+# router names without a dot get this domain appended (e.g. "rtr1" ->
+# "rtr1.example.org").  Names that already contain a dot are left unchanged.
+#default_domain = "example.org"
+
 # Synchronization behavior options
 [sync]
 #  Argus incident acknowledgments can be synchronized back to Zino.  The

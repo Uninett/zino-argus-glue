@@ -21,7 +21,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from operator import itemgetter
-from typing import Optional
+from typing import Iterator, Optional
 
 import requests
 import zinolib as ritz
@@ -731,14 +731,35 @@ def describe_zino_case(zino_case: ritz.Case):
     return None
 
 
-def generate_tags(zino_case):
-    yield "host", zino_case.router
+def generate_tags(zino_case: ritz.Case) -> Iterator[tuple[str, str]]:
+    yield "host", _qualify_host(zino_case.router)
+    yield "event_type", zino_case.type.value
+    yield "priority", str(zino_case.priority)
     if zino_case.type == ritz.caseType.PORTSTATE:
         yield "interface", zino_case.port
         descr = zino_case.get("descr")
         if descr:
             yield "description", descr
-            # GET UN
+    elif zino_case.type == ritz.caseType.BGP:
+        remote_as = zino_case.get("remote_as")
+        if remote_as is not None:
+            yield "remote_as", str(remote_as)
+        remote_addr = zino_case.get("remote_addr")
+        if remote_addr is not None:
+            yield "remote_addr", str(remote_addr)
+
+
+def _qualify_host(router: str) -> str:
+    """Return the router name as an FQDN using the configured default domain.
+
+    The domain is only appended to bare router names; a name that already
+    contains a dot is assumed to be fully qualified and returned unchanged.
+    This assumes router names are hostnames, not IP literals.
+    """
+    domain = _config.zino.default_domain
+    if domain and "." not in router:
+        return f"{router}.{domain}"
+    return router
 
 
 def close_argus_incident(

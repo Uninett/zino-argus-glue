@@ -50,6 +50,7 @@ class ZinoConfiguration(BaseModel):
     port: int = 8001
     user: str
     secret: str
+    default_domain: Optional[str] = None
 
 
 class MetadataConfiguration(BaseModel):

@@ -32,8 +32,9 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-"Homepage" = "https://github.com/Uninett/zino-argus-glue"
+"GitHub" = "https://github.com/Uninett/zino-argus-glue"
 "Changelog" = "https://github.com/Uninett/zino-argus-glue/blob/master/CHANGELOG.md"
+Argus = "https://network.geant.org/argus/"
 
 [project.scripts]
 zinoargus = "zinoargus:main"

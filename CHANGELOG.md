@@ -11,11 +11,35 @@ the upcoming release can be found in
 
 <!-- towncrier release notes start -->
 
+## [0.5.0] - 2026-07-02
+
+### Added
+
+- Argus incidents now carry `event_type` and `priority` tags for every Zino
+  case, plus `remote_as` and `remote_addr` tags for BGP
+  cases. ([#33](https://github.com/Uninett/zino-argus-glue/issues/33))
+- A new optional `default_domain` setting in the `[zino]` config section
+  qualifies bare router names into FQDNs for the `host`
+  tag. ([#33](https://github.com/Uninett/zino-argus-glue/issues/33))
+- Map Zino case priority to Argus incident severity level via the new
+  `[sync.severity]` configuration
+  ([#35](https://github.com/Uninett/zino-argus-glue/issues/35))
+
+### Fixed
+
+- Made the daemon resilient to transient faults instead of exiting on the first
+  error. It now reconnects to Zino with exponential backoff after a dropped
+  connection and retries intermittent Argus REST errors (5xx/network) in
+  place. Authentication failures on either side remain fatal.
+
+
 ## [0.4.0] - 2026-04-28
 
 ### Added
 
-- Added failover mechanism for primary/secondary Zino deployments. A secondary instance monitors the primary via SNMP and only syncs to Argus when the primary is unreachable. ([#30](https://github.com/Uninett/zino/issues/30))
+- Added failover mechanism for primary/secondary Zino deployments. A secondary
+  instance monitors the primary via SNMP and only syncs to Argus when the
+  primary is unreachable. ([#30](https://github.com/Uninett/zino/issues/30))
 
 ### Changed
 

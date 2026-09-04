@@ -1,0 +1,1 @@
+The Pydantic requirement is now `pydantic>=2.7` instead of `pydantic<2.11`. The upper bound was speculative and made the glue service impossible to install alongside Zino itself, which requires Pydantic 2.11 or newer in its NetBSD pkgsrc packaging.

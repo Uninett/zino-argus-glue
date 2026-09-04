@@ -7,10 +7,6 @@ import time
 
 import pytest
 
-# def pytest_configure(config):
-#     # This forces a specific Argus version, if needed
-#     config.option.argus_version = "2.7.0"
-
 
 @pytest.fixture
 def zino(zino_configuration_file):

@@ -105,6 +105,13 @@ exclude_also = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')"
 ]
+# Pin the Argus server image used by the integration tests: argus:latest (and
+# the identical 2.10.0 tag, rebuilt 2026-08-31) dies at Django setup with
+# "ModuleNotFoundError: No module named 'django_tasks'", since Argus lists
+# django_tasks in INSTALLED_APPS while django-tasks-db 0.13.0 demoted
+# django-tasks to an optional "compat" extra. 2.9.1 still bundles it.
+# TODO: Drop this pin once a fixed Argus image is published
+addopts = "--argus-version 2.9.1"
 
 [tool.towncrier]
 directory = "changelog.d"

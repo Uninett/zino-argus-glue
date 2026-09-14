@@ -11,6 +11,13 @@ the upcoming release can be found in
 
 <!-- towncrier release notes start -->
 
+## [0.5.1] - 2026-09-14
+
+### Changed
+
+- The Pydantic requirement is now `pydantic>=2.7` instead of `pydantic<2.11`. The upper bound was speculative and made the glue service impossible to install alongside Zino itself, which requires Pydantic 2.11 or newer in its NetBSD pkgsrc packaging.
+
+
 ## [0.5.0] - 2026-07-02
 
 ### Added

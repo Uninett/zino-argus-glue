@@ -17,6 +17,8 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: System :: Networking :: Monitoring",
 ]
 dependencies = [
@@ -40,11 +42,11 @@ zinoargus = "zinoargus:main"
 [dependency-groups]
 test = [
     "coverage",
-    "pytest>7",
+    "pytest>=8",
     "pytest-argus-server>=0.3.0",
     "pytest-cov",
     "tox",
-    "zino>=2.0.0",
+    "zino>=2.5.3",
 ]
 maintenance = [
     "build",

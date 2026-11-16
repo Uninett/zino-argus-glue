@@ -15,14 +15,13 @@
 #
 from os import PathLike
 from tomllib import TOMLDecodeError, load
-from typing import Union
 
 from pydantic import ValidationError
 
 from .models import Configuration
 
 
-def read_configuration(config_file_name: Union[str, PathLike[str]]) -> Configuration:
+def read_configuration(config_file_name: str | PathLike[str]) -> Configuration:
     """Reads and returns the configuration file contents as a dictionary.
 
     Returns configuration if file name is given and file exists.

@@ -19,9 +19,9 @@ import logging
 import signal
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from operator import itemgetter
-from typing import Iterator, Optional
 
 import requests
 import zinolib as ritz
@@ -85,10 +85,10 @@ RETRYABLE_ARGUS_ERRORS = (ServerError, ClientConnectionError)
 # the guards re-raise it explicitly before falling back to this catch-all.
 SKIPPABLE_ARGUS_ERRORS = (ServerError, ClientConnectionError, ClientError)
 
-_config: Optional[Configuration] = None
-_zino: Optional[ritz.ritz] = None
-_notifier: Optional[ritz.notifier] = None
-_argus: Optional[Client] = None
+_config: Configuration | None = None
+_zino: ritz.ritz | None = None
+_notifier: ritz.notifier | None = None
+_argus: Client | None = None
 _circuit_metadata = dict()
 _last_incident_refresh = datetime.now()
 _last_ping = datetime.now()
@@ -764,8 +764,8 @@ def _qualify_host(router: str) -> str:
 
 def close_argus_incident(
     incident: Incident,
-    case: Optional[ritz.Case] = None,
-    description: Optional[str] = None,
+    case: ritz.Case | None = None,
+    description: str | None = None,
 ) -> None:
     """Closes an Argus incident.
 
@@ -774,7 +774,7 @@ def close_argus_incident(
     the end event description will also be taken from the last history entry.
     """
     _logger.info("Closing Argus incident %s", incident.pk)
-    timestamp = datetime.now(tz=timezone.utc)
+    timestamp = datetime.now(tz=UTC)
     if case:
         if last_history := get_last_case_history_entry(case):
             timestamp = last_history.get("date").replace(tzinfo=MY_TZINFO)
@@ -785,7 +785,7 @@ def close_argus_incident(
     incident.open = False
 
 
-def get_last_case_history_entry(case: ritz.Case) -> Optional[dict]:
+def get_last_case_history_entry(case: ritz.Case) -> dict | None:
     """Returns the last history entry for a case"""
     history = _zino.get_history(case.id)
     if not history:

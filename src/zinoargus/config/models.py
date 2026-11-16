@@ -16,7 +16,7 @@
 
 """Zino configuration models"""
 
-from typing import List, Literal, Optional, Union
+from typing import Literal
 
 from pydantic import (
     AnyHttpUrl,
@@ -27,7 +27,7 @@ from pydantic import (
     PositiveFloat,
 )
 
-Host = Union[IPvAnyAddress, str]
+Host = IPvAnyAddress | str
 
 
 class ArgusConfiguration(BaseModel):
@@ -50,7 +50,7 @@ class ZinoConfiguration(BaseModel):
     port: int = 8001
     user: str
     secret: str
-    default_domain: Optional[str] = None
+    default_domain: str | None = None
 
 
 class MetadataConfiguration(BaseModel):
@@ -59,7 +59,7 @@ class MetadataConfiguration(BaseModel):
     # throw ValidationError on extra keys
     model_config = ConfigDict(extra="forbid")
 
-    ports_url: Optional[AnyHttpUrl] = None
+    ports_url: AnyHttpUrl | None = None
 
 
 class AcknowledgeSyncConfiguration(BaseModel):
@@ -107,7 +107,7 @@ class SeverityConfiguration(BaseModel):
 
     # Argus level used when a case's priority is below every configured band.
     default: int = Field(default=3, ge=1, le=5)
-    thresholds: List[SeverityBand] = Field(default_factory=list)
+    thresholds: list[SeverityBand] = Field(default_factory=list)
 
 
 class SyncConfiguration(BaseModel):
@@ -116,8 +116,8 @@ class SyncConfiguration(BaseModel):
     # throw ValidationError on extra keys
     model_config = ConfigDict(extra="forbid")
 
-    acknowledge: Optional[AcknowledgeSyncConfiguration] = AcknowledgeSyncConfiguration()
-    ticket: Optional[TicketSyncConfiguration] = TicketSyncConfiguration()
+    acknowledge: AcknowledgeSyncConfiguration | None = AcknowledgeSyncConfiguration()
+    ticket: TicketSyncConfiguration | None = TicketSyncConfiguration()
     # Severity mapping is always active: an absent [sync.severity] block yields
     # these defaults, so every Argus incident gets an explicit level (3/Moderate
     # by default) rather than relying on Argus's own server-side default.
@@ -144,6 +144,6 @@ class Configuration(BaseModel):
 
     argus: ArgusConfiguration
     zino: ZinoConfiguration
-    sync: Optional[SyncConfiguration] = SyncConfiguration()
-    metadata: Optional[MetadataConfiguration] = MetadataConfiguration()
-    failover: Optional[FailoverConfiguration] = None
+    sync: SyncConfiguration | None = SyncConfiguration()
+    metadata: MetadataConfiguration | None = MetadataConfiguration()
+    failover: FailoverConfiguration | None = None

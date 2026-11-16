@@ -4,11 +4,7 @@ on:
   pull_request:
       # labeled/unlabeled = label is added/removed
       # synchronize = PR's head branch was updated
-      # edited = base branch was changed
-      types: [labeled, unlabeled, opened, reopened, synchronize, edited]
-
-permissions:
-  contents: read
+      types: [labeled, unlabeled, opened, reopened, synchronize]
 
 jobs:
   towncrier:
@@ -16,15 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     name: Towncrier check
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 0
-        persist-credentials: false
 
-    - name: Set up uv
-      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-
+    - name: Install towncrier
+      run: |
+        sudo apt-get install -y pipx
+        pipx install towncrier
     - name: Check for changelog file
-      env:
-        BASE_REF: ${{ github.base_ref }}
-      run: uvx towncrier@26.9.0 check --compare-with "origin/$BASE_REF"
+      run: towncrier check --compare-with origin/master

@@ -14,16 +14,12 @@
 # limitations under the License.
 #
 from os import PathLike
+from tomllib import TOMLDecodeError, load
 from typing import Union
 
 from pydantic import ValidationError
 
 from .models import Configuration
-
-try:
-    from tomllib import TOMLDecodeError, load
-except ImportError:
-    from tomli import TOMLDecodeError, load
 
 
 def read_configuration(config_file_name: Union[str, PathLike[str]]) -> Configuration:

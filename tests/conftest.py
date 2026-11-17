@@ -27,7 +27,7 @@ def wait_for_zino_api():
             s.connect(("localhost", 8001))
             s.close()
             return
-        except socket.error:
+        except OSError:
             time.sleep(1)
     pytest.fail("Could not connect to port 8001 after multiple retries")
 

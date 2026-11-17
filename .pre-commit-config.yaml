@@ -11,7 +11,8 @@ repos:
     rev: v0.14.13
     hooks:
         # Run the linter
-    -   id: ruff
+    -   id: ruff-check
+        args: [ --fix ]
         name: "Ruff linting"
         # Run the formatter
     -   id: ruff-format

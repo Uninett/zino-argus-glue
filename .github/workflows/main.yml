@@ -7,6 +7,10 @@ on:
       - 'test/*'
   pull_request:
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
